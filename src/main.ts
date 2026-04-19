@@ -344,6 +344,16 @@ function pct(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+function normalizeRolloutStages(raw: string): number[] {
+  const values = raw
+    .split(',')
+    .map((part) => Number(part.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0 && value <= 100);
+
+  const uniqueSorted = Array.from(new Set(values)).sort((left, right) => left - right);
+  return uniqueSorted;
+}
+
 function dateFmt(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
@@ -593,10 +603,10 @@ function renderRotationExhibit(): string {
         <div><span>Pure PQ</span><strong>${pct((readiness.pqOnly / Math.max(1, state.rotationServers.length)) * 100)}</strong></div>
         <div><span>Traffic on Hybrid or PQ</span><strong>${pct(readiness.totalTrafficOnHybridOrPQ)}</strong></div>
       </div>
-      <div class="card" role="status" aria-live="polite">
+      <div class="card" role="status" aria-live="polite" aria-atomic="true">
         <h3>Fleet Status: ${numberFmt(state.rotationServers.length)} servers in 5 regions</h3>
         <p>${summarizeRotation(state.rotationSummary)}</p>
-        ${state.uiMessage ? `<p class="status-message ${state.uiMessageTone === 'error' ? 'error' : 'info'}">${state.uiMessage}</p>` : ''}
+        ${state.uiMessage ? `<p class="status-message ${state.uiMessageTone === 'error' ? 'error' : 'info'}" ${state.uiMessageTone === 'error' ? 'role="alert"' : ''}>${state.uiMessage}</p>` : ''}
         <ol class="log-list">
           ${latestLogs.length === 0 ? '<li>No simulation run yet.</li>' : latestLogs.map((log) => `<li><strong>${log.action}</strong> — ${log.notes}</li>`).join('')}
         </ol>
@@ -722,20 +732,44 @@ function bindEvents(): void {
       const canary = Number((document.querySelector<HTMLInputElement>('#canaryPercent')?.value ?? '10').trim());
       const monitoringHours = Number((document.querySelector<HTMLInputElement>('#monitorHours')?.value ?? '24').trim());
       const stageText = document.querySelector<HTMLInputElement>('#rolloutStages')?.value ?? '10,50,100';
-      const stageValues = stageText
-        .split(',')
-        .map((part) => Number(part.trim()))
-        .filter((value) => Number.isFinite(value) && value > 0 && value <= 100);
+      const stageValues = normalizeRolloutStages(stageText);
       const failureStep = document.querySelector<HTMLSelectElement>('#failureStep')?.value ?? 'none';
+
+      const safeCanary = Number.isFinite(canary) ? Math.round(canary) : 10;
+      const safeMonitoring = Number.isFinite(monitoringHours) ? Math.round(monitoringHours) : 24;
+      if (safeCanary < 1 || safeCanary > 20) {
+        state.uiMessage = 'Canary percent must be between 1 and 20.';
+        state.uiMessageTone = 'error';
+        runButton.disabled = false;
+        runButton.textContent = 'Run Rotation';
+        renderDashboard();
+        return;
+      }
+      if (safeMonitoring < 1 || safeMonitoring > 72) {
+        state.uiMessage = 'Monitoring hours must be between 1 and 72.';
+        state.uiMessageTone = 'error';
+        runButton.disabled = false;
+        runButton.textContent = 'Run Rotation';
+        renderDashboard();
+        return;
+      }
+      if (stageValues.length === 0) {
+        state.uiMessage = 'Rollout stages must include values between 1 and 100, for example: 10,50,100.';
+        state.uiMessageTone = 'error';
+        runButton.disabled = false;
+        runButton.textContent = 'Run Rotation';
+        renderDashboard();
+        return;
+      }
 
       try {
         state.rotationLogs = [];
         const runResult = await simulateRotation(
           createFleet(1247),
           {
-            canaryPercent: Number.isFinite(canary) ? canary : 10,
-            monitoringHours: Number.isFinite(monitoringHours) ? monitoringHours : 24,
-            rolloutPercentages: stageValues.length > 0 ? stageValues : [10, 50, 100],
+            canaryPercent: safeCanary,
+            monitoringHours: safeMonitoring,
+            rolloutPercentages: stageValues,
             failureInjection:
               failureStep === 'none'
                 ? { injectFailure: false }

@@ -4,7 +4,7 @@
   --bg-2: #153b4d;
   --panel: rgba(8, 20, 33, 0.7);
   --ink: #e8f1f7;
-  --muted: #aac2d3;
+  --muted: #c2d5e2;
   --legacy: #ff3366;
   --hybrid: #ffd700;
   --pq: #00ff88;
@@ -260,6 +260,11 @@ th {
   background: rgba(6, 14, 22, 0.62);
 }
 
+.radio:focus-within {
+  border-color: var(--canary);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+}
+
 .timeline-track {
   margin-top: 12px;
   display: grid;
@@ -391,6 +396,11 @@ button {
 .links a:hover {
   transform: translateY(-2px);
   border-color: var(--canary);
+}
+
+.links a:focus-visible {
+  border-color: var(--canary);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.25);
 }
 
 .status-message {
