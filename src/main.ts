@@ -648,6 +648,28 @@ function renderPrayerWarriorsExhibit(): string {
   `;
 }
 
+function renderAccessibilityExhibit(): string {
+  return `
+    <section class="panel" id="accessibility" aria-labelledby="accessibility-title">
+      <div class="panel-head">
+        <h2 id="accessibility-title">Exhibit 6: Accessibility Checklist</h2>
+        <p>Operational controls verified for mobile usability and assistive-technology compatibility.</p>
+      </div>
+      <div class="card">
+        <ul class="checklist" aria-label="Accessibility and usability checklist">
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Keyboard-first navigation with visible focus outlines.</span></li>
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Skip link to jump directly to the first exhibit.</span></li>
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Form controls validate input and report clear error states.</span></li>
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Live rotation status announces updates with polite and alert channels.</span></li>
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Responsive layout supports narrow screens and touch-sized controls.</span></li>
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Reduced-motion preference honored for users with vestibular sensitivity.</span></li>
+          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Data tables include caption and semantic column headers.</span></li>
+        </ul>
+      </div>
+    </section>
+  `;
+}
+
 function renderDashboard(): void {
   const demo = getSelectedDemo();
   const framework = getSelectedFramework();
@@ -685,6 +707,7 @@ function renderDashboard(): void {
       ${renderCertificateExhibit()}
       ${renderRotationExhibit()}
       ${renderPrayerWarriorsExhibit()}
+      ${renderAccessibilityExhibit()}
     </main>
   `;
 

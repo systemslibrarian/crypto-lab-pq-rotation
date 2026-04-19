@@ -419,6 +419,38 @@ button {
   background: rgba(255, 51, 102, 0.12);
 }
 
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.checklist li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.check {
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  line-height: 1.3;
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(4, 18, 30, 0.55);
+}
+
+.check.ok {
+  color: #d7ffe8;
+  border-color: rgba(0, 255, 136, 0.5);
+  background: rgba(0, 255, 136, 0.12);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -491,6 +523,11 @@ button {
 
   .run {
     width: 100%;
+  }
+
+  .checklist li {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 }
 
