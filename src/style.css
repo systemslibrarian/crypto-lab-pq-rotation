@@ -40,6 +40,35 @@ body {
   background-attachment: fixed;
 }
 
+a,
+button,
+input,
+select {
+  min-height: 44px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--canary);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 12px;
+  background: #062235;
+  color: #ffffff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  z-index: 1000;
+  border: 1px solid var(--canary);
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
 main.dashboard {
   width: min(1200px, 96vw);
   margin: 0 auto;
@@ -124,7 +153,7 @@ h1 {
   background: rgba(0, 0, 0, 0.22);
   color: var(--ink);
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 9px 12px;
   cursor: pointer;
 }
 
@@ -142,6 +171,10 @@ h1 {
 
 .card h3 {
   margin: 0 0 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
 }
 
 table {
@@ -206,6 +239,15 @@ th {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  border: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+.framework-picker legend {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 4px;
 }
 
 .radio {
@@ -305,7 +347,7 @@ button {
   background: rgba(2, 10, 17, 0.8);
   color: var(--ink);
   font-family: var(--mono);
-  padding: 7px;
+  padding: 10px;
 }
 
 .run {
@@ -351,6 +393,34 @@ button {
   border-color: var(--canary);
 }
 
+.status-message {
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 10px 0 0;
+}
+
+.status-message.info {
+  border: 1px solid rgba(0, 212, 255, 0.55);
+  background: rgba(0, 212, 255, 0.12);
+}
+
+.status-message.error {
+  border: 1px solid rgba(255, 51, 102, 0.6);
+  background: rgba(255, 51, 102, 0.12);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @keyframes reveal {
   from {
     opacity: 0;
@@ -366,6 +436,7 @@ button {
   main.dashboard {
     width: 94vw;
     padding-top: 18px;
+    gap: 14px;
   }
 
   .hero {
@@ -374,5 +445,52 @@ button {
 
   .panel {
     padding: 14px;
+  }
+
+  .hero-tags {
+    gap: 6px;
+  }
+
+  .hero-tags span {
+    font-size: 12px;
+    padding: 7px 10px;
+  }
+
+  .timeline-track {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .phase-grid > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  table {
+    font-size: 0.86rem;
+    min-width: 520px;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .run {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

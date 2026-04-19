@@ -305,6 +305,8 @@ const state = {
   rotationServers: createFleet(1247),
   rotationLogs: [] as RotationStep[],
   rotationSummary: null as Awaited<ReturnType<typeof simulateRotation>> | null,
+  uiMessage: '' as string,
+  uiMessageTone: 'info' as 'info' | 'error',
 };
 
 function randomBytes(length: number): Uint8Array {
@@ -412,21 +414,22 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
   const score = Math.max(0, Math.min(100, Math.round((highRisk.length / Math.max(1, demo.items.length)) * 100 + 35)));
 
   return `
-    <section class="panel" id="inventory">
+    <section class="panel" id="inventory" aria-labelledby="inventory-title">
       <div class="panel-head">
-        <h2>Exhibit 1: Your Cryptographic Inventory</h2>
+        <h2 id="inventory-title">Exhibit 1: Your Cryptographic Inventory</h2>
         <p>${demo.narrative}</p>
       </div>
       <div class="button-row" role="group" aria-label="inventory demos">
-        <button data-action="demo" data-demo="small" class="chip ${state.selectedDemoKey === 'small' ? 'active' : ''}">Load demo: Small enterprise</button>
-        <button data-action="demo" data-demo="gov" class="chip ${state.selectedDemoKey === 'gov' ? 'active' : ''}">Load demo: Government agency</button>
-        <button data-action="demo" data-demo="finance" class="chip ${state.selectedDemoKey === 'finance' ? 'active' : ''}">Load demo: Financial services</button>
+        <button type="button" data-action="demo" data-demo="small" aria-pressed="${state.selectedDemoKey === 'small'}" class="chip ${state.selectedDemoKey === 'small' ? 'active' : ''}">Load demo: Small enterprise</button>
+        <button type="button" data-action="demo" data-demo="gov" aria-pressed="${state.selectedDemoKey === 'gov'}" class="chip ${state.selectedDemoKey === 'gov' ? 'active' : ''}">Load demo: Government agency</button>
+        <button type="button" data-action="demo" data-demo="finance" aria-pressed="${state.selectedDemoKey === 'finance'}" class="chip ${state.selectedDemoKey === 'finance' ? 'active' : ''}">Load demo: Financial services</button>
       </div>
-      <div class="card">
+      <div class="card table-wrap" role="region" aria-label="Inventory summary table">
         <h3>Demo inventory: ${demo.name}</h3>
         <table>
+          <caption class="sr-only">Cryptographic inventory counts, algorithms, and sensitivity ranges</caption>
           <thead>
-            <tr><th>Type</th><th>Algorithm</th><th>Count</th><th>Sensitivity</th></tr>
+            <tr><th scope="col">Type</th><th scope="col">Algorithm</th><th scope="col">Count</th><th scope="col">Sensitivity</th></tr>
           </thead>
           <tbody>
             ${demo.rows
@@ -463,19 +466,20 @@ function renderTimelineExhibit(demo: InventoryDemo, framework: RegulatoryFramewo
   const doom = computeDoomMeter(now, framework);
 
   return `
-    <section class="panel" id="timeline">
+    <section class="panel" id="timeline" aria-labelledby="timeline-title">
       <div class="panel-head">
-        <h2>Exhibit 2: Interactive Timeline Planner</h2>
+        <h2 id="timeline-title">Exhibit 2: Interactive Timeline Planner</h2>
         <p>Aligning migration phases with published national frameworks.</p>
       </div>
-      <div class="framework-picker">
+      <fieldset class="framework-picker">
+        <legend>Select regulatory framework</legend>
         ${FRAMEWORKS.map(
           (item) =>
             `<label class="radio"><input type="radio" name="framework" data-action="framework" value="${item.name}" ${
               item.name === framework.name ? 'checked' : ''
             }><span>${item.name.replaceAll('_', ' ')}</span></label>`,
         ).join('')}
-      </div>
+      </fieldset>
       <div class="card timeline-track">
         ${framework.milestones
           .map((milestone) => `<div class="milestone"><strong>${dateFmt(milestone.date)}</strong><p>${milestone.description}</p></div>`)
@@ -509,15 +513,15 @@ function renderCertificateExhibit(): string {
   const mult = (hybridSize / classicalSize).toFixed(1);
 
   return `
-    <section class="panel" id="certs">
+    <section class="panel" id="certs" aria-labelledby="certs-title">
       <div class="panel-head">
-        <h2>Exhibit 3: Hybrid Certificate Anatomy</h2>
+        <h2 id="certs-title">Exhibit 3: Hybrid Certificate Anatomy</h2>
         <p>X.509-style hybrid chain with classical ECDSA and PQ ML-DSA-65 signatures per composite-signature drafts.</p>
       </div>
       <div class="button-row" role="group" aria-label="certificate view">
-        <button data-action="cert-view" data-view="classical" class="chip ${mode === 'classical' ? 'active' : ''}">Classical</button>
-        <button data-action="cert-view" data-view="hybrid" class="chip ${mode === 'hybrid' ? 'active' : ''}">Hybrid</button>
-        <button data-action="cert-view" data-view="pure_pq" class="chip ${mode === 'pure_pq' ? 'active' : ''}">Pure PQ</button>
+        <button type="button" data-action="cert-view" data-view="classical" aria-pressed="${mode === 'classical'}" class="chip ${mode === 'classical' ? 'active' : ''}">Classical</button>
+        <button type="button" data-action="cert-view" data-view="hybrid" aria-pressed="${mode === 'hybrid'}" class="chip ${mode === 'hybrid' ? 'active' : ''}">Hybrid</button>
+        <button type="button" data-action="cert-view" data-view="pure_pq" aria-pressed="${mode === 'pure_pq'}" class="chip ${mode === 'pure_pq' ? 'active' : ''}">Pure PQ</button>
       </div>
       <div class="cert-grid">
         <article class="card ${mode === 'classical' ? 'focus' : ''}">
@@ -563,9 +567,9 @@ function renderRotationExhibit(): string {
   const latestLogs = state.rotationLogs.slice(-8);
 
   return `
-    <section class="panel" id="rotation">
+    <section class="panel" id="rotation" aria-labelledby="rotation-title">
       <div class="panel-head">
-        <h2>Exhibit 4: Live Rotation Simulation</h2>
+        <h2 id="rotation-title">Exhibit 4: Live Rotation Simulation</h2>
         <p>Canary-first staged rollout with mandatory monitoring gates and automatic rollback.</p>
       </div>
       <div class="controls card">
@@ -581,7 +585,7 @@ function renderRotationExhibit(): string {
             <option value="rotate_100">At 100% rollout</option>
           </select>
         </label>
-        <button data-action="run-rotation" class="run">Run Rotation</button>
+        <button type="button" data-action="run-rotation" class="run">Run Rotation</button>
       </div>
       <div class="metrics">
         <div><span>Classical Only</span><strong>${pct((readiness.classicalOnly / Math.max(1, state.rotationServers.length)) * 100)}</strong></div>
@@ -589,9 +593,10 @@ function renderRotationExhibit(): string {
         <div><span>Pure PQ</span><strong>${pct((readiness.pqOnly / Math.max(1, state.rotationServers.length)) * 100)}</strong></div>
         <div><span>Traffic on Hybrid or PQ</span><strong>${pct(readiness.totalTrafficOnHybridOrPQ)}</strong></div>
       </div>
-      <div class="card">
+      <div class="card" role="status" aria-live="polite">
         <h3>Fleet Status: ${numberFmt(state.rotationServers.length)} servers in 5 regions</h3>
         <p>${summarizeRotation(state.rotationSummary)}</p>
+        ${state.uiMessage ? `<p class="status-message ${state.uiMessageTone === 'error' ? 'error' : 'info'}">${state.uiMessage}</p>` : ''}
         <ol class="log-list">
           ${latestLogs.length === 0 ? '<li>No simulation run yet.</li>' : latestLogs.map((log) => `<li><strong>${log.action}</strong> — ${log.notes}</li>`).join('')}
         </ol>
@@ -602,9 +607,9 @@ function renderRotationExhibit(): string {
 
 function renderPrayerWarriorsExhibit(): string {
   return `
-    <section class="panel" id="prayer-warriors">
+    <section class="panel" id="prayer-warriors" aria-labelledby="prayer-warriors-title">
       <div class="panel-head">
-        <h2>Exhibit 5: PrayerWarriors.Mobi Migration Plan</h2>
+        <h2 id="prayer-warriors-title">Exhibit 5: PrayerWarriors.Mobi Migration Plan</h2>
         <p>Designing a new platform in 2026: build crypto-agility now, avoid a retrofit crisis in 2030.</p>
       </div>
       <div class="card">
@@ -653,7 +658,8 @@ function renderDashboard(): void {
   }
 
   root.innerHTML = `
-    <main class="dashboard">
+    <a class="skip-link" href="#inventory">Skip to first exhibit</a>
+    <main class="dashboard" id="main-content" tabindex="-1">
       <header class="hero">
         <p class="kicker">Post-Quantum Migration Planner</p>
         <h1>Operational PQC Migration, Not A One-Day Swap</h1>
@@ -710,6 +716,8 @@ function bindEvents(): void {
     runButton.addEventListener('click', async () => {
       runButton.disabled = true;
       runButton.textContent = 'Running...';
+      state.uiMessage = '';
+      state.uiMessageTone = 'info';
 
       const canary = Number((document.querySelector<HTMLInputElement>('#canaryPercent')?.value ?? '10').trim());
       const monitoringHours = Number((document.querySelector<HTMLInputElement>('#monitorHours')?.value ?? '24').trim());
@@ -720,33 +728,47 @@ function bindEvents(): void {
         .filter((value) => Number.isFinite(value) && value > 0 && value <= 100);
       const failureStep = document.querySelector<HTMLSelectElement>('#failureStep')?.value ?? 'none';
 
-      state.rotationLogs = [];
-      const runResult = await simulateRotation(
-        createFleet(1247),
-        {
-          canaryPercent: Number.isFinite(canary) ? canary : 10,
-          monitoringHours: Number.isFinite(monitoringHours) ? monitoringHours : 24,
-          rolloutPercentages: stageValues.length > 0 ? stageValues : [10, 50, 100],
-          failureInjection:
-            failureStep === 'none'
-              ? { injectFailure: false }
-              : { injectFailure: true, atStep: failureStep, severity: 'major' },
-        },
-        (step) => state.rotationLogs.push(step),
-      );
+      try {
+        state.rotationLogs = [];
+        const runResult = await simulateRotation(
+          createFleet(1247),
+          {
+            canaryPercent: Number.isFinite(canary) ? canary : 10,
+            monitoringHours: Number.isFinite(monitoringHours) ? monitoringHours : 24,
+            rolloutPercentages: stageValues.length > 0 ? stageValues : [10, 50, 100],
+            failureInjection:
+              failureStep === 'none'
+                ? { injectFailure: false }
+                : { injectFailure: true, atStep: failureStep, severity: 'major' },
+          },
+          (step) => state.rotationLogs.push(step),
+        );
 
-      state.rotationSummary = runResult;
-      state.rotationServers = runResult.finalState;
-
-      runButton.disabled = false;
-      runButton.textContent = 'Run Rotation';
-      renderDashboard();
+        state.rotationSummary = runResult;
+        state.rotationServers = runResult.finalState;
+        state.uiMessage = runResult.success
+          ? 'Rotation completed with phase gates satisfied.'
+          : 'Rotation failed a phase gate and rolled back safely.';
+        state.uiMessageTone = runResult.success ? 'info' : 'error';
+      } catch {
+        state.uiMessage = 'Simulation failed unexpectedly. Inputs were preserved so you can retry safely.';
+        state.uiMessageTone = 'error';
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = 'Run Rotation';
+        renderDashboard();
+      }
     });
   }
 }
 
 async function bootstrap(): Promise<void> {
-  await generateCertificateDemo();
+  try {
+    await generateCertificateDemo();
+  } catch {
+    state.uiMessage = 'Certificate demo failed to initialize. Refresh to retry generation.';
+    state.uiMessageTone = 'error';
+  }
   renderDashboard();
 }
 
