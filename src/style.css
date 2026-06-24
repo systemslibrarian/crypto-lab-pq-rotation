@@ -463,6 +463,223 @@ button {
   border: 0;
 }
 
+.check.fail {
+  color: #ffd5df;
+  border-color: rgba(255, 51, 102, 0.6);
+  background: rgba(255, 51, 102, 0.14);
+}
+
+/* Mosca's inequality card */
+.mosca {
+  margin-top: 12px;
+  border-color: rgba(0, 212, 255, 0.4);
+}
+
+.mosca .formula {
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  margin: 6px 0 10px;
+}
+
+.mosca .formula strong {
+  color: var(--canary);
+}
+
+.mosca-legend {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+}
+
+.mosca-legend strong {
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+.mosca-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin: 10px 0;
+}
+
+.mosca-controls label {
+  display: grid;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.mosca-controls strong {
+  color: var(--canary);
+  font-family: var(--mono);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  /* Keep a 44px-tall touch/click target while the visible track stays thin. */
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--pq), var(--hybrid), var(--legacy));
+}
+
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--pq), var(--hybrid), var(--legacy));
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -8px; /* center the 22px thumb on the 6px track */
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--canary);
+  border: 2px solid #02101a;
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.4);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--canary);
+  border: 2px solid #02101a;
+}
+
+input[type="range"]:focus-visible {
+  outline: 3px solid var(--canary);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+
+.mosca-verdict {
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+
+.mosca-verdict.bad {
+  border: 1px solid rgba(255, 51, 102, 0.55);
+  background: rgba(255, 51, 102, 0.12);
+  color: #ffd5df;
+}
+
+.mosca-verdict.good {
+  border: 1px solid rgba(0, 255, 136, 0.5);
+  background: rgba(0, 255, 136, 0.1);
+  color: #d7ffe8;
+}
+
+.mosca-example {
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.mosca-example strong {
+  color: var(--ink);
+}
+
+/* Tamper lab */
+.tamper-lab {
+  margin-top: 14px;
+  border-color: rgba(255, 215, 0, 0.4);
+}
+
+.sig-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.sig-indicator {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  background: rgba(5, 15, 24, 0.7);
+}
+
+.sig-indicator span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.sig-indicator strong {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+}
+
+.sig-indicator.ok {
+  border-color: rgba(0, 255, 136, 0.55);
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.sig-indicator.ok strong {
+  color: var(--pq);
+}
+
+.sig-indicator.fail {
+  border-color: rgba(255, 51, 102, 0.6);
+  background: rgba(255, 51, 102, 0.12);
+}
+
+.sig-indicator.fail strong {
+  color: var(--legacy);
+}
+
+.sig-indicator.pending strong {
+  color: var(--muted);
+}
+
+.tamper-verdict {
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.tamper-verdict p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.tamper-verdict.good {
+  border: 1px solid rgba(0, 255, 136, 0.5);
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.tamper-verdict.good strong {
+  color: var(--pq);
+}
+
+.tamper-verdict.bad {
+  border: 1px solid rgba(255, 51, 102, 0.55);
+  background: rgba(255, 51, 102, 0.12);
+}
+
+.tamper-verdict.bad strong {
+  color: var(--legacy);
+}
+
 @keyframes reveal {
   from {
     opacity: 0;

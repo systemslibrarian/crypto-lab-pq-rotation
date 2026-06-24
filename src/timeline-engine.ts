@@ -313,6 +313,43 @@ export const CANADA_CCCS: RegulatoryFramework = {
   ],
 };
 
+export interface MoscaEvaluation {
+  vulnerable: boolean;
+  shelfLifeYears: number; // X — how long the data must stay confidential
+  migrationYears: number; // Y — how long migrating this system takes
+  yearsToCrqc: number; // Z — years until a cryptographically relevant quantum computer
+  exposed: boolean; // X + Y > Z  ->  harvest-now-decrypt-later already bites
+  marginYears: number; // (X + Y) - Z; positive means too late, negative means buffer
+}
+
+/**
+ * Mosca's inequality. If the data's shelf life (X) plus the time to migrate (Y)
+ * is greater than the time until a quantum computer can break today's
+ * cryptography (Z), then data harvested today will still be sensitive when it
+ * becomes decryptable. In that case the migration is already behind, regardless
+ * of how far off "the quantum threat" feels.
+ */
+export function evaluateMosca(
+  item: CryptoInventoryItem,
+  crqcArrivalYear: number,
+  migrationYears: number,
+  today: Date = new Date(),
+): MoscaEvaluation {
+  const vulnerable = algorithmIsQuantumVulnerable(item.currentAlgorithm);
+  const shelfLifeYears = item.dataSensitivityYears;
+  const yearsToCrqc = Math.max(0, crqcArrivalYear - today.getUTCFullYear());
+  const marginYears = shelfLifeYears + migrationYears - yearsToCrqc;
+
+  return {
+    vulnerable,
+    shelfLifeYears,
+    migrationYears,
+    yearsToCrqc,
+    exposed: vulnerable && marginYears > 0,
+    marginYears,
+  };
+}
+
 export function computePriorityScore(item: CryptoInventoryItem): number {
   const algorithmPenalty = algorithmIsQuantumVulnerable(item.currentAlgorithm) ? 12 : -10;
   const sensitivityWeight = Math.min(item.dataSensitivityYears, 30) * 1.4;

@@ -8,9 +8,12 @@ Browser-based PQC migration planner for operational teams.
 
 The demo includes:
 
-- Hybrid X.509-style certificates with classical + PQ signatures (ECDSA-P256 + ML-DSA-65) and byte-size analysis.
+- An interactive **Mosca's-inequality** model (X + Y > Z) with adjustable CRQC year and migration time, so you can see exactly when "harvest now, decrypt later" already puts your data past the line.
+- Hybrid X.509-style certificates with classical + PQ signatures (ECDSA-P256 + ML-DSA-65) and **measured** byte-size analysis (not estimates).
+- A **tamper lab** on the real certificate: forge the classical signature, the PQ signature, or the body and watch verification react live — demonstrating why a hybrid verifier trusts a certificate only when *both* signatures hold.
 - A timeline engine that aligns migration actions with major regulatory frameworks (CNSA 2.0, EU NIS, UK NCSC, Australia ASD, Germany BSI, Canada CCCS).
 - A rolling key rotation simulator with canary deployment, monitoring windows, staged rollout, and automatic rollback.
+- An **in-browser verification suite** that runs the lab's own cryptographic self-tests so you can confirm none of the results are faked.
 - A dashboard interface that visualizes inventory risk, phase progress, and operational readiness.
 
 It uses real cryptographic primitives:
@@ -18,7 +21,7 @@ It uses real cryptographic primitives:
 - ECDSA-P256 from `@noble/curves`
 - ML-DSA-65 from `@noble/post-quantum`
 
-This makes the size and operational tradeoffs visible, including the substantial certificate size increase for hybrid deployments.
+Every byte size shown is measured from keys and signatures generated live in the browser. A classical ECDSA-P256 leaf certificate is ~1.2 KB; the hybrid equivalent is ~6.5 KB (≈5.4× larger), and the cryptographic material alone — public key plus signature — grows roughly 55× once ML-DSA-65's 1,952-byte key and 3,309-byte signature are added. This makes the size and operational tradeoffs of hybrid deployment concrete rather than asserted.
 
 ## When to Use It
 

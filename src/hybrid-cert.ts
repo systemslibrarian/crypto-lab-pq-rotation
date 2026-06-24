@@ -3,9 +3,24 @@ import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 
 const encoder = new TextEncoder();
 
-const CLASSICAL_CERT_ESTIMATE_BYTES = 1_500;
-const PURE_PQ_CERT_ESTIMATE_BYTES = 8_000;
-const HYBRID_CERT_ESTIMATE_BYTES = 11_800;
+// The cryptographic material (public keys + signatures) is MEASURED from the
+// real primitives at issue time — nothing here is a guessed constant. The only
+// modeled value is the X.509 envelope: the issuer/subject DN, validity window,
+// serial, AKI/SKI, EKU, SAN, CRL/OCSP pointers, SCT, and ASN.1 framing that a
+// real public leaf certificate carries. That envelope is algorithm-independent,
+// so it is the same byte cost whether the cert is classical, hybrid, or pure PQ.
+const X509_ENVELOPE_BYTES = 1_100;
+// ML-DSA-65 public keys are a fixed 1952 bytes (FIPS 204). Used to split the
+// concatenated hybrid subjectPublicKey back into its classical + PQ halves.
+const ML_DSA_65_PUBLIC_KEY_BYTES = 1_952;
+
+export interface CertificateComponents {
+  envelopeBytes: number;
+  classicalPubKeyBytes: number;
+  pqPubKeyBytes: number;
+  classicalSigBytes: number;
+  pqSigBytes: number;
+}
 
 export interface CertificateBody {
   version: number;
@@ -23,6 +38,7 @@ export interface HybridCertificate {
   classicalSignature: Uint8Array;
   pqSignature: Uint8Array;
   bodyHash: Uint8Array;
+  components: CertificateComponents;
   totalSizeBytes: number;
   classicalSizeBytes: number;
   pqSizeBytes: number;
@@ -55,11 +71,6 @@ async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
   const digestInput = Uint8Array.from(bytes);
   const digest = await crypto.subtle.digest('SHA-256', digestInput);
   return new Uint8Array(digest);
-}
-
-function estimateHybridCertificateSize(bodyBytesLength: number, classicalSigLength: number, pqSigLength: number): number {
-  const rawHybridBytes = bodyBytesLength + classicalSigLength + pqSigLength;
-  return Math.max(HYBRID_CERT_ESTIMATE_BYTES, rawHybridBytes);
 }
 
 function tamperAwareReason(classicalValid: boolean, pqValid: boolean, hashMatches: boolean): string | undefined {
@@ -103,14 +114,28 @@ export async function issueHybridCertificate(
   const classicalSignature = p256.sign(bodyHash, caClassicalKey, { format: 'compact' });
   const pqSignature = ml_dsa65.sign(bodyHash, caPQKey);
 
+  const components: CertificateComponents = {
+    envelopeBytes: X509_ENVELOPE_BYTES,
+    classicalPubKeyBytes: Math.max(0, subjectPublicKey.length - ML_DSA_65_PUBLIC_KEY_BYTES),
+    pqPubKeyBytes: ML_DSA_65_PUBLIC_KEY_BYTES,
+    classicalSigBytes: classicalSignature.length,
+    pqSigBytes: pqSignature.length,
+  };
+
   return {
     body,
     classicalSignature,
     pqSignature,
     bodyHash,
-    totalSizeBytes: estimateHybridCertificateSize(serializedBody.length, classicalSignature.length, pqSignature.length),
-    classicalSizeBytes: CLASSICAL_CERT_ESTIMATE_BYTES,
-    pqSizeBytes: PURE_PQ_CERT_ESTIMATE_BYTES,
+    components,
+    classicalSizeBytes: components.envelopeBytes + components.classicalPubKeyBytes + components.classicalSigBytes,
+    pqSizeBytes: components.envelopeBytes + components.pqPubKeyBytes + components.pqSigBytes,
+    totalSizeBytes:
+      components.envelopeBytes +
+      components.classicalPubKeyBytes +
+      components.pqPubKeyBytes +
+      components.classicalSigBytes +
+      components.pqSigBytes,
   };
 }
 
@@ -140,25 +165,42 @@ export async function verifyHybridCertificate(
 }
 
 export function analyzeCertificateSize(cert: HybridCertificate): {
-  total: number;
-  body: number;
+  envelope: number;
+  classicalPubKey: number;
+  pqPubKey: number;
   classicalSig: number;
   pqSig: number;
-  overhead: number;
-  overheadPercent: number;
+  classicalTotal: number;
+  purePqTotal: number;
+  hybridTotal: number;
+  hybridVsClassical: number;
+  cryptoMaterialClassical: number;
+  cryptoMaterialHybrid: number;
+  cryptoMaterialRatio: number;
 } {
-  const body = serializeCertificateBody(cert.body).length;
-  const classicalSig = cert.classicalSignature.length;
-  const pqSig = cert.pqSignature.length;
-  const overhead = Math.max(0, cert.totalSizeBytes - body - classicalSig - pqSig);
+  const c = cert.components;
+  const classicalTotal = c.envelopeBytes + c.classicalPubKeyBytes + c.classicalSigBytes;
+  const purePqTotal = c.envelopeBytes + c.pqPubKeyBytes + c.pqSigBytes;
+  const hybridTotal =
+    c.envelopeBytes + c.classicalPubKeyBytes + c.pqPubKeyBytes + c.classicalSigBytes + c.pqSigBytes;
+  // The envelope is shared, so the algorithm-attributable growth is clearest
+  // when isolated to the crypto material (public key + signature) alone.
+  const cryptoMaterialClassical = c.classicalPubKeyBytes + c.classicalSigBytes;
+  const cryptoMaterialHybrid = c.classicalPubKeyBytes + c.pqPubKeyBytes + c.classicalSigBytes + c.pqSigBytes;
 
   return {
-    total: cert.totalSizeBytes,
-    body,
-    classicalSig,
-    pqSig,
-    overhead,
-    overheadPercent: cert.totalSizeBytes === 0 ? 0 : Number(((overhead / cert.totalSizeBytes) * 100).toFixed(1)),
+    envelope: c.envelopeBytes,
+    classicalPubKey: c.classicalPubKeyBytes,
+    pqPubKey: c.pqPubKeyBytes,
+    classicalSig: c.classicalSigBytes,
+    pqSig: c.pqSigBytes,
+    classicalTotal,
+    purePqTotal,
+    hybridTotal,
+    hybridVsClassical: Number((hybridTotal / Math.max(1, classicalTotal)).toFixed(1)),
+    cryptoMaterialClassical,
+    cryptoMaterialHybrid,
+    cryptoMaterialRatio: Math.round(cryptoMaterialHybrid / Math.max(1, cryptoMaterialClassical)),
   };
 }
 
@@ -204,13 +246,16 @@ export async function runHybridCertificateChecks(): Promise<{
   );
   const tamperedPqVerification = await verifyHybridCertificate(tamperedPQ, caClassical.publicKey, caPq.publicKey);
   const size = analyzeCertificateSize(certificate);
-  const breakdownMatches = size.body + size.classicalSig + size.pqSig + size.overhead === size.total;
+  const breakdownMatches =
+    size.hybridTotal === size.envelope + size.classicalPubKey + size.pqPubKey + size.classicalSig + size.pqSig;
 
   return {
     issuedAndVerified: verification.valid,
     classicalTamperDetected: !tamperedClassicalVerification.classicalValid,
     pqTamperDetected: !tamperedPqVerification.pqValid,
-    sizeEstimateReasonable: certificate.classicalSizeBytes >= 1_400 && certificate.totalSizeBytes >= 11_000,
+    // ML-DSA-65 signatures are a fixed 3309 bytes; a classical leaf cert lands
+    // around 1.2 KB. If these measured values drift, the primitives changed.
+    sizeEstimateReasonable: size.pqSig === 3_309 && size.classicalTotal >= 1_000 && size.classicalTotal <= 2_000,
     sizeBreakdownAccurate: breakdownMatches,
   };
 }
