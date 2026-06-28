@@ -1,7 +1,5 @@
 # crypto-lab-pq-rotation
 
-Browser-based PQC migration planner for operational teams.
-
 ## What It Is
 
 `crypto-lab-pq-rotation` is a browser-based interactive planner for post-quantum cryptography migration, focused on real deployment operations rather than algorithm theory. It models the end-to-end transition from cryptographic inventory through hybrid deployment to pure PQC in a five-phase program.
@@ -32,12 +30,13 @@ Use this project when you need to:
 - Teach operational realities: root CA rotation, HSM/KMS readiness, rollback planning, and monitoring coverage.
 - Compare regulatory timelines across jurisdictions.
 - Prototype crypto-agile architecture decisions for new systems.
-
-Do not use this as a production PKI or key-management platform. It is an educational planning tool, not a CA product.
+- Do NOT use this as a production PKI or key-management platform — it is an educational planning tool, not a CA product.
 
 ## Live Demo
 
-https://systemslibrarian.github.io/crypto-lab-pq-rotation/
+**[systemslibrarian.github.io/crypto-lab-pq-rotation](https://systemslibrarian.github.io/crypto-lab-pq-rotation/)**
+
+The planner walks a five-phase PQC migration program end to end: an interactive Mosca's-inequality model, a live hybrid X.509 certificate (ECDSA-P256 + ML-DSA-65) with a tamper lab that forges the classical signature, the PQ signature, or the body, a regulatory-timeline engine spanning CNSA 2.0 and other jurisdictions, a rolling key-rotation simulator with canary rollout and automatic rollback, an in-browser cryptographic self-test suite, and an inventory/readiness dashboard. Every byte size shown is measured from keys and signatures generated live in the browser.
 
 ## What Can Go Wrong
 
@@ -65,3 +64,25 @@ The migration framework represented here aligns with published guidance from:
 Hybrid certificate modeling follows the composite-signature transition direction described in IETF LAMPS work (including draft-ietf-lamps-pq-composite-sigs).
 
 The implementation reflects real migration patterns used by large enterprises and public-sector organizations: inventory first, hybrid rollout, monitored phased rotation, rollback-safe operations, and eventual classical retirement under compliance timelines.
+
+## How to Run Locally
+
+```bash
+git clone https://github.com/systemslibrarian/crypto-lab-pq-rotation
+cd crypto-lab-pq-rotation
+npm install
+npm run dev
+```
+
+## Related Demos
+- [crypto-lab-harvest-timeline](https://systemslibrarian.github.io/crypto-lab-harvest-timeline/) — the Mosca inequality and cost-of-delay scenarios that justify migrating now.
+- [crypto-lab-hybrid-sign](https://systemslibrarian.github.io/crypto-lab-hybrid-sign/) — Ed25519 + ML-DSA-65 composite signatures, the IETF LAMPS construction this planner deploys.
+- [crypto-lab-pki-chain](https://systemslibrarian.github.io/crypto-lab-pki-chain/) — X.509 certificate chains and the trust hierarchy being rotated.
+- [crypto-lab-pq-families](https://systemslibrarian.github.io/crypto-lab-pq-families/) — the five PQC families and the size tradeoffs that drive migration choices.
+- [crypto-lab-pq-tls-handshake](https://systemslibrarian.github.io/crypto-lab-pq-tls-handshake/) — hybrid X25519MLKEM768 key exchange, the TLS side of the same migration.
+
+---
+
+*One of 60+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
+
+*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
