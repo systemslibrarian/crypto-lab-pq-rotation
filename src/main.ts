@@ -17,7 +17,6 @@ import {
   GERMANY_BSI,
   UK_NCSC,
   computeHNDLRisk,
-  computePriorityScore,
   evaluateMosca,
   generateMigrationPlan,
   runTimelineEngineChecks,
@@ -899,12 +898,6 @@ function renderDashboard(): void {
     risk: computeHNDLRisk(item, state.crqcYear, new Date()),
   }));
 
-  const highestPriority = [...demo.items]
-    .sort((left, right) => computePriorityScore(right) - computePriorityScore(left))
-    .slice(0, 3)
-    .map((item) => item.systemName)
-    .join(', ');
-
   const root = document.querySelector<HTMLDivElement>('#app');
   if (!root) {
     throw new Error('Missing #app container.');
@@ -921,15 +914,16 @@ function renderDashboard(): void {
       <a class="skip-link" href="#inventory">Skip to first exhibit</a>
     </nav>
     <main class="dashboard" id="main-content" tabindex="-1">
-      <header class="hero">
-        <p class="kicker">Post-Quantum Migration Planner</p>
-        <h1>Operational PQC Migration, Not A One-Day Swap</h1>
-        <p class="subtitle">Test Mosca's inequality against your inventory, forge a real hybrid certificate to see why both signatures must hold, and run a monitored fleet rotation — all against CNSA 2.0 and allied roadmap milestones.</p>
-        <div class="hero-tags">
-          <span>CNSA 2.0 (2025, Jan 2027, 2030, 2035)</span>
-          <span>EU NIS, UK NCSC, Canada CCCS, Germany BSI, Australia ASD</span>
-          <span>Top current priorities: ${highestPriority}</span>
+      <header class="cl-hero">
+        <div class="cl-hero-main">
+          <h1 class="cl-hero-title">PQC Migration</h1>
+          <p class="cl-hero-sub">Mosca's Inequality · Hybrid ECDSA-P256 + ML-DSA-65 · Fleet Rotation</p>
+          <p class="cl-hero-desc">Score Mosca's inequality against your inventory, forge and tamper a hybrid dual-signature certificate to prove both signatures must verify, then run a canary-monitored fleet rotation with automatic rollback.</p>
         </div>
+        <aside class="cl-hero-why" aria-label="Why it matters">
+          <span class="cl-hero-why-label">WHY IT MATTERS</span>
+          <p class="cl-hero-why-text">A future quantum computer can decrypt data adversaries record today. Deciding when to migrate, shipping certificates both classical and PQ verifiers trust, and rotating a fleet without an outage is a program, not a one-day swap.</p>
+        </aside>
       </header>
       ${renderInventoryExhibit(demo, riskRows)}
       ${renderTimelineExhibit(demo, framework)}
