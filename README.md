@@ -4,15 +4,17 @@
 
 `crypto-lab-pq-rotation` is a browser-based interactive planner for post-quantum cryptography migration, focused on real deployment operations rather than algorithm theory. It models the end-to-end transition from cryptographic inventory through hybrid deployment to pure PQC in a five-phase program.
 
+A **"Start here" stepper** at the top gives the newcomer a single causal spine — urgency justifies the hybrid fix, the fix has a size cost, deadlines sequence the work, and staged rotation ships it — and each of the four steps links to its section. Jargon (HNDL, composite signatures, canary) is glossed in one plain sentence on first use, in the same style as the Mosca card.
+
 The demo includes:
 
-- An interactive **Mosca's-inequality** model (X + Y > Z) with adjustable CRQC year and migration time, so you can see exactly when "harvest now, decrypt later" already puts your data past the line.
-- Hybrid X.509-style certificates with classical + PQ signatures (ECDSA-P256 + ML-DSA-65) and **measured** byte-size analysis (not estimates).
-- A **tamper lab** on the real certificate: forge the classical signature, the PQ signature, or the body and watch verification react live — demonstrating why a hybrid verifier trusts a certificate only when *both* signatures hold.
-- A timeline engine that aligns migration actions with major regulatory frameworks (CNSA 2.0, EU NIS, UK NCSC, Australia ASD, Germany BSI, Canada CCCS).
-- A rolling key rotation simulator with canary deployment, monitoring windows, staged rollout, and automatic rollback.
+- An interactive **Mosca's-inequality** model (X + Y > Z) with adjustable CRQC year and migration time, pairing the generic formula with a live worst-case worked example pulled from the loaded inventory, so you can see exactly when "harvest now, decrypt later" (HNDL) already puts your data past the line.
+- Hybrid X.509-style certificates with classical + PQ signatures (ECDSA-P256 + ML-DSA-65) and **measured** byte-size analysis (not estimates), shown as **to-scale stacked bars** (envelope, classical pubkey/sig, PQ pubkey/sig) so the ML-DSA signature's dominance of the size cost is visible at a glance.
+- A **tamper lab** on the real certificate: forge the classical signature, the PQ signature, or the body and watch verification react live. A **certificate-structure diagram** (Body → SHA-256 hash → {classical sig, PQ sig} → overall trust) turns the affected block red and shows the actual flipped hex byte before/after — demonstrating why a hybrid verifier trusts a certificate only when *both* signatures hold.
+- A timeline engine that aligns migration actions with major regulatory frameworks (CNSA 2.0, EU NIS, UK NCSC, Australia ASD, Germany BSI, Canada CCCS). Each phase bar is a **self-explaining count** (how many inventory items are due by today) with one concrete example action and its planned date; the Doom Meter numbers are traced back to the framework's own milestone dates.
+- A rolling key rotation simulator with canary deployment, monitoring windows, staged rollout, and automatic rollback, visualized as a **fleet dot grid** that recolours classical → hybrid as stages roll out, highlights the single canary, and reverts to classical on an injected-failure rollback.
 - An **in-browser verification suite** that runs the lab's own cryptographic self-tests so you can confirm none of the results are faked.
-- A dashboard interface that visualizes inventory risk, phase progress, and operational readiness.
+- An **"About this demo"** fold at the bottom with a greenfield PQ-aware architecture example, accessibility notes, and links to companion labs.
 
 It uses real cryptographic primitives:
 

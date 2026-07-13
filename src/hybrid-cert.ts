@@ -89,6 +89,13 @@ function tamperAwareReason(classicalValid: boolean, pqValid: boolean, hashMatche
   return undefined;
 }
 
+// Recompute the SHA-256 of a certificate body exactly as verification does.
+// Exposed so the UI can show the *real* hash a tampered body produces, rather
+// than fabricating a before/after byte for the structure visual.
+export async function hashCertificateBody(body: CertificateBody): Promise<Uint8Array> {
+  return sha256(serializeCertificateBody(body));
+}
+
 export async function issueHybridCertificate(
   subject: string,
   caClassicalKey: Uint8Array,

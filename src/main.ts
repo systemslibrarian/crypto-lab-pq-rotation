@@ -4,9 +4,11 @@ import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 import './style.css';
 import {
   analyzeCertificateSize,
+  hashCertificateBody,
   issueHybridCertificate,
   runHybridCertificateChecks,
   verifyHybridCertificate,
+  type CertificateBody,
   type HybridCertificate,
 } from './hybrid-cert.ts';
 import {
@@ -311,6 +313,9 @@ const state = {
   certCaKeys: null as { classicalPub: Uint8Array; pqPub: Uint8Array } | null,
   certTamper: 'none' as TamperMode,
   certValidation: null as Awaited<ReturnType<typeof verifyHybridCertificate>> | null,
+  // The concrete byte the current tamper flipped, so the structure visual can
+  // show the real before/after hex (not a made-up value).
+  certFlip: null as { where: string; index: number; before: number; after: number } | null,
   certSize: null as ReturnType<typeof analyzeCertificateSize> | null,
   rotationServers: createFleet(1247),
   rotationLogs: [] as RotationStep[],
@@ -423,6 +428,11 @@ async function generateCertificateDemo(): Promise<void> {
   await refreshCertValidation();
 }
 
+async function recomputeBodyHashFirstByte(body: CertificateBody): Promise<number> {
+  const hash = await hashCertificateBody(body);
+  return hash[0];
+}
+
 function cloneCertificate(cert: HybridCertificate): HybridCertificate {
   return {
     ...cert,
@@ -446,14 +456,24 @@ async function refreshCertValidation(): Promise<void> {
   }
 
   let probe = cert;
+  state.certFlip = null;
   if (state.certTamper !== 'none') {
     probe = cloneCertificate(cert);
     if (state.certTamper === 'classical') {
+      const before = probe.classicalSignature[0];
       probe.classicalSignature[0] ^= 0x01;
+      state.certFlip = { where: 'ECDSA-P256 signature, byte 0', index: 0, before, after: probe.classicalSignature[0] };
     } else if (state.certTamper === 'pq') {
+      const before = probe.pqSignature[0];
       probe.pqSignature[0] ^= 0x01;
+      state.certFlip = { where: 'ML-DSA-65 signature, byte 0', index: 0, before, after: probe.pqSignature[0] };
     } else if (state.certTamper === 'body') {
+      const before = probe.bodyHash[0];
       probe.body = { ...probe.body, subject: `${probe.body.subject} [altered]` };
+      // The body changed, so verify recomputes a different SHA-256. Show the
+      // first hash byte before vs. what the altered body now hashes to.
+      const altered = await recomputeBodyHashFirstByte(probe.body);
+      state.certFlip = { where: 'certificate body → SHA-256 hash, byte 0', index: 0, before, after: altered };
     }
   }
 
@@ -491,7 +511,7 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
   return `
     <section class="panel" id="inventory" aria-labelledby="inventory-title">
       <div class="panel-head">
-        <h2 id="inventory-title">Exhibit 1: Your Cryptographic Inventory</h2>
+        <h2 id="inventory-title">Step 1 — Are you already late? (Inventory &amp; Mosca)</h2>
         <p>${demo.narrative}</p>
       </div>
       <div class="button-row" role="group" aria-label="inventory demos">
@@ -547,7 +567,8 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
         </p>
       </div>
       <div class="alert">
-        <h3>Highest-Risk Systems (harvest-now-decrypt-later)</h3>
+        <h3>Highest-Risk Systems (HNDL)</h3>
+        <p class="gloss"><strong>HNDL = harvest now, decrypt later</strong>: an attacker records your encrypted traffic today and simply stores it, then decrypts it once a quantum computer arrives. Anything whose secrecy must outlast that arrival is already at risk — which is exactly what Mosca’s inequality above measures.</p>
         <ul>
           ${highRisk.length === 0
             ? '<li>No critical/high HNDL systems at the current CRQC assumption.</li>'
@@ -561,21 +582,71 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
   `;
 }
 
+const PHASE_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'Inventory',
+  2: 'Prioritize',
+  3: 'Crypto-agility',
+  4: 'Hybrid deployment',
+  5: 'Pure PQC',
+};
+
+// Turn one phase's planned actions into a self-explaining row: how many of the
+// inventory items are scheduled complete by TODAY, and one concrete example —
+// the next action still due, with its real planned date — so the percentage
+// stops being an opaque dashboard number and becomes "X of Y items done, next
+// up is <system> on <date>."
+function phaseExplainer(
+  plan: ReturnType<typeof generateMigrationPlan>,
+  phase: 1 | 2 | 3 | 4 | 5,
+  demo: InventoryDemo,
+  now: Date,
+): { percent: number; done: number; total: number; nextName: string | null; nextDate: string | null } {
+  const actions = plan.filter((entry) => entry.phase === phase);
+  const total = actions.length;
+  const done = actions.filter((a) => a.plannedDate.getTime() <= now.getTime()).length;
+  const percent = phaseCompletion(actions.map((a) => a.plannedDate), now);
+  const upcoming = actions
+    .filter((a) => a.plannedDate.getTime() > now.getTime())
+    .sort((l, r) => l.plannedDate.getTime() - r.plannedDate.getTime())[0];
+  const nameOf = (id: string): string => demo.items.find((it) => it.id === id)?.systemName ?? id;
+  return {
+    percent,
+    done,
+    total,
+    nextName: upcoming ? nameOf(upcoming.itemId) : null,
+    nextDate: upcoming ? dateFmt(upcoming.plannedDate) : null,
+  };
+}
+
+function renderPhaseRow(label: string, phaseNumber: number, e: ReturnType<typeof phaseExplainer>): string {
+  const example = e.nextName
+    ? `next: ${e.nextName} scheduled ${e.nextDate}`
+    : 'all scheduled actions are already past-due today';
+  return `
+    <div class="phase-row">
+      <div class="phase-row-top">
+        <span class="phase-bar" aria-hidden="true">${renderProgressBar(e.percent)}</span>
+        <em>Phase ${phaseNumber} ${label} — ${e.done}/${e.total} items due by today (${pct(e.percent)})</em>
+      </div>
+      <p class="phase-detail">${e.done} of ${e.total} planned Phase ${phaseNumber} actions have a target date on or before today; ${example}.</p>
+    </div>`;
+}
+
 function renderTimelineExhibit(demo: InventoryDemo, framework: RegulatoryFramework): string {
   const now = new Date();
   const plan = generateMigrationPlan(demo.items, framework, now);
-  const phase1 = phaseCompletion(plan.filter((entry) => entry.phase === 1).map((entry) => entry.plannedDate), now);
-  const phase2 = phaseCompletion(plan.filter((entry) => entry.phase === 2).map((entry) => entry.plannedDate), now);
-  const phase3 = phaseCompletion(plan.filter((entry) => entry.phase === 3).map((entry) => entry.plannedDate), now);
-  const phase4 = phaseCompletion(plan.filter((entry) => entry.phase === 4).map((entry) => entry.plannedDate), now);
-  const phase5 = phaseCompletion(plan.filter((entry) => entry.phase === 5).map((entry) => entry.plannedDate), now);
+  const e1 = phaseExplainer(plan, 1, demo, now);
+  const e2 = phaseExplainer(plan, 2, demo, now);
+  const e3 = phaseExplainer(plan, 3, demo, now);
+  const e4 = phaseExplainer(plan, 4, demo, now);
+  const e5 = phaseExplainer(plan, 5, demo, now);
   const doom = computeDoomMeter(now, framework);
 
   return `
     <section class="panel" id="timeline" aria-labelledby="timeline-title">
       <div class="panel-head">
-        <h2 id="timeline-title">Exhibit 2: Interactive Timeline Planner</h2>
-        <p>Aligning migration phases with published national frameworks.</p>
+        <h2 id="timeline-title">Step 4 — How deadlines drive sequencing (Timeline)</h2>
+        <p>Regulatory dates decide the order and pace of the phases. Each bar below is a real count of planned actions due by today under the framework you pick.</p>
       </div>
       <fieldset class="framework-picker">
         <legend>Select regulatory framework</legend>
@@ -591,16 +662,18 @@ function renderTimelineExhibit(demo: InventoryDemo, framework: RegulatoryFramewo
           .map((milestone) => `<div class="milestone"><strong>${dateFmt(milestone.date)}</strong><p>${milestone.description}</p></div>`)
           .join('')}
       </div>
+      <p class="small-note">Each bar answers one question: of the ${demo.items.length} catalogued systems, how many should already have finished this phase today under the <strong>${framework.name.replaceAll('_', ' ')}</strong> deadlines? Percentages are counts, not a mood.</p>
       <div class="phase-grid">
-        <div><span>${renderProgressBar(phase1)}</span><em>Phase 1 Inventory (${pct(phase1)})</em></div>
-        <div><span>${renderProgressBar(phase2)}</span><em>Phase 2 Prioritize (${pct(phase2)})</em></div>
-        <div><span>${renderProgressBar(phase3)}</span><em>Phase 3 Crypto-agility (${pct(phase3)})</em></div>
-        <div><span>${renderProgressBar(phase4)}</span><em>Phase 4 Hybrid deployment (${pct(phase4)})</em></div>
-        <div><span>${renderProgressBar(phase5)}</span><em>Phase 5 Pure PQC (${pct(phase5)})</em></div>
+        ${renderPhaseRow(PHASE_LABELS[1], 1, e1)}
+        ${renderPhaseRow(PHASE_LABELS[2], 2, e2)}
+        ${renderPhaseRow(PHASE_LABELS[3], 3, e3)}
+        ${renderPhaseRow(PHASE_LABELS[4], 4, e4)}
+        ${renderPhaseRow(PHASE_LABELS[5], 5, e5)}
       </div>
       <div class="doom">
         <h3>The Doom Meter</h3>
-        <p>If you start today, first hybrid deployment in <strong>${doom.firstHybridMonths} months</strong>, 50% hybrid in <strong>${doom.halfCoverageMonths} months</strong>, full migration in <strong>${doom.fullYears} years</strong>.</p>
+        <p class="small-note">Derived straight from the framework’s own milestone dates: the gap from today to its pilot date, its high-risk (50%) date, and its full-migration date.</p>
+        <p>If you start today, first hybrid deployment in <strong>${doom.firstHybridMonths} months</strong> (framework pilot milestone), 50% hybrid in <strong>${doom.halfCoverageMonths} months</strong> (high-risk milestone), full migration in <strong>${doom.fullYears} years</strong> (final deadline).</p>
         <p>${doom.warning}</p>
       </div>
     </section>
@@ -645,10 +718,135 @@ function tamperVerdict(): { headline: string; detail: string; tone: 'good' | 'ba
   }
 }
 
+function hex2(value: number | undefined): string {
+  if (value === undefined) return '··';
+  return value.toString(16).padStart(2, '0').toUpperCase();
+}
+
+// The causal chain of trust, drawn as blocks with arrows:
+//   Body -> SHA-256 hash -> {Classical sig, PQ sig} -> Overall trust
+// When a byte is flipped, the affected block turns red (state via class + text,
+// never colour alone) and trust snaps to FORGED. The real flipped hex byte is
+// shown before -> after so the newcomer sees the tamper propagate, not a prop.
+function renderCertStructure(validation: Awaited<ReturnType<typeof verifyHybridCertificate>> | null): string {
+  const t = state.certTamper;
+  const flip = state.certFlip;
+  const bodyBad = t === 'body';
+  const hashBad = t === 'body'; // altering the body changes its SHA-256 hash
+  const classicalBad = validation ? !validation.classicalValid : false;
+  const pqBad = validation ? !validation.pqValid : false;
+  const trustBad = validation ? !validation.valid : false;
+
+  const blockState = (bad: boolean): string => (bad ? 'bad' : 'ok');
+  const stateWord = (bad: boolean, okWord: string, badWord: string): string => (bad ? badWord : okWord);
+
+  const flipLine = flip
+    ? `<p class="flip-line" role="status" aria-live="polite">Flipped byte — <strong>${flip.where}</strong>: <span class="hex-before">0x${hex2(flip.before)}</span> <span aria-hidden="true">→</span> <span class="hex-after">0x${hex2(flip.after)}</span>.</p>`
+    : `<p class="flip-line small-note">No byte flipped. Untampered, every block below is intact and trust holds.</p>`;
+
+  return `
+    <div class="cert-structure" aria-label="Certificate trust chain: body hashed to SHA-256, then signed by both algorithms, both of which must verify for the certificate to be trusted.">
+      <div class="cs-block ${blockState(bodyBad)}">
+        <span class="cs-title">Certificate body</span>
+        <span class="cs-meta">DN, validity, serial, public keys</span>
+        <span class="cs-state">${stateWord(bodyBad, 'intact', 'ALTERED')}</span>
+      </div>
+      <div class="cs-arrow" aria-hidden="true">↓ SHA-256</div>
+      <div class="cs-block ${blockState(hashBad)}">
+        <span class="cs-title">SHA-256 body hash</span>
+        <span class="cs-meta">what the CA actually signs</span>
+        <span class="cs-state">${stateWord(hashBad, 'matches', 'MISMATCH')}</span>
+      </div>
+      <div class="cs-arrow" aria-hidden="true">↓ signed by CA</div>
+      <div class="cs-sigs">
+        <div class="cs-block ${blockState(classicalBad)}">
+          <span class="cs-title">Classical sig</span>
+          <span class="cs-meta">ECDSA-P256</span>
+          <span class="cs-state">${stateWord(classicalBad, 'VALID', 'FORGED')}</span>
+        </div>
+        <div class="cs-block ${blockState(pqBad)}">
+          <span class="cs-title">PQ sig</span>
+          <span class="cs-meta">ML-DSA-65</span>
+          <span class="cs-state">${stateWord(pqBad, 'VALID', 'FORGED')}</span>
+        </div>
+      </div>
+      <div class="cs-arrow" aria-hidden="true">↓ both must hold</div>
+      <div class="cs-block cs-trust ${blockState(trustBad)}">
+        <span class="cs-title">Overall trust</span>
+        <span class="cs-state">${stateWord(trustBad, 'TRUSTED', 'FORGED')}</span>
+      </div>
+      ${flipLine}
+    </div>
+  `;
+}
+
 function sigIndicator(label: string, ok: boolean | undefined): string {
   const state = ok === undefined ? '—' : ok ? 'VALID' : 'FORGED';
   const cls = ok === undefined ? 'pending' : ok ? 'ok' : 'fail';
   return `<div class="sig-indicator ${cls}"><span>${label}</span><strong>${state}</strong></div>`;
+}
+
+// One byte-for-byte segment of a certificate size bar.
+interface CertSegment {
+  key: 'envelope' | 'classicalPub' | 'classicalSig' | 'pqPub' | 'pqSig';
+  label: string;
+  bytes: number;
+  pq: boolean; // PQ segments slide in when switching Classical -> Hybrid/Pure PQ
+}
+
+// Build the labelled, to-scale segments for one certificate variant. The bytes
+// come from the real measured sizes when a cert has been issued, and fall back
+// to the spec-exact constants (P-256: 33 B key / 64 B compact sig; ML-DSA-65:
+// 1,952 B key / 3,309 B sig; shared 1,100 B X.509 envelope) before then.
+function certSegments(
+  variant: 'classical' | 'hybrid' | 'pure_pq',
+  size: ReturnType<typeof analyzeCertificateSize> | null,
+): CertSegment[] {
+  const envelope = size?.envelope ?? 1_100;
+  const classicalPub = size?.classicalPubKey ?? 33;
+  const classicalSig = size?.classicalSig ?? 64;
+  const pqPub = size?.pqPubKey ?? 1_952;
+  const pqSig = size?.pqSig ?? 3_309;
+
+  const seg = (key: CertSegment['key'], label: string, bytes: number, pq: boolean): CertSegment => ({ key, label, bytes, pq });
+  const env = seg('envelope', 'X.509 envelope', envelope, false);
+  const cPub = seg('classicalPub', 'ECDSA pubkey', classicalPub, false);
+  const cSig = seg('classicalSig', 'ECDSA sig', classicalSig, false);
+  const pPub = seg('pqPub', 'ML-DSA pubkey', pqPub, true);
+  const pSig = seg('pqSig', 'ML-DSA sig', pqSig, true);
+
+  if (variant === 'classical') return [env, cPub, cSig];
+  if (variant === 'pure_pq') return [env, pPub, pSig];
+  return [env, cPub, cSig, pPub, pSig];
+}
+
+// Render a to-scale horizontal stacked bar. Every variant is drawn against the
+// SAME byte scale (the widest total) so the eye can compare bars directly and
+// see that the ML-DSA signature is the dominant cost. PQ segments carry a class
+// so CSS can slide them in when the view flips from Classical to Hybrid.
+function renderCertBar(
+  title: string,
+  segments: CertSegment[],
+  scaleMax: number,
+  focused: boolean,
+): string {
+  const total = segments.reduce((sum, s) => sum + s.bytes, 0);
+  const parts = segments
+    .map((s) => {
+      const widthPct = (s.bytes / scaleMax) * 100;
+      return `<span class="cert-seg seg-${s.key} ${s.pq ? 'seg-pq' : ''}" style="width:${widthPct.toFixed(3)}%" title="${s.label}: ${numberFmt(s.bytes)} bytes">
+        <span class="cert-seg-label">${s.label} · ${numberFmt(s.bytes)} B</span>
+      </span>`;
+    })
+    .join('');
+  return `
+    <div class="cert-bar-row ${focused ? 'focus' : ''}">
+      <div class="cert-bar-head"><strong>${title}</strong><span class="cert-bar-total">${numberFmt(total)} B total</span></div>
+      <div class="cert-bar" role="img" aria-label="${title}: ${numberFmt(total)} bytes total, made of ${segments.map((s) => `${s.label} ${numberFmt(s.bytes)} bytes`).join(', ')}.">
+        ${parts}
+      </div>
+    </div>
+  `;
 }
 
 function renderCertificateExhibit(): string {
@@ -663,40 +861,41 @@ function renderCertificateExhibit(): string {
   const mult = size?.hybridVsClassical ?? 5.4;
   const cryptoRatio = size?.cryptoMaterialRatio ?? 55;
 
+  const classicalSegs = certSegments('classical', size);
+  const hybridSegs = certSegments('hybrid', size);
+  const purePqSegs = certSegments('pure_pq', size);
+  const scaleMax = Math.max(
+    classicalSegs.reduce((s, x) => s + x.bytes, 0),
+    hybridSegs.reduce((s, x) => s + x.bytes, 0),
+    purePqSegs.reduce((s, x) => s + x.bytes, 0),
+  );
+
   return `
     <section class="panel" id="certs" aria-labelledby="certs-title">
       <div class="panel-head">
-        <h2 id="certs-title">Exhibit 3: Hybrid Certificate Anatomy</h2>
-        <p>A real X.509-style leaf certificate dual-signed with classical ECDSA-P256 and PQ ML-DSA-65, per the composite-signature drafts. Every byte size below is measured from the actual keys and signatures generated in your browser.</p>
+        <h2 id="certs-title">Steps 2 &amp; 3 — The fix and its cost (Hybrid certificate)</h2>
+        <p>A real X.509-style leaf certificate dual-signed with classical ECDSA-P256 and PQ ML-DSA-65, per the <em>composite-signature</em> drafts. Every byte size below is measured from the actual keys and signatures generated in your browser.</p>
+        <p class="gloss"><strong>Composite signature</strong> = one certificate carrying two independent signatures (a classical one and a post-quantum one) that must <em>both</em> verify; a verifier that only understands the old algorithm still accepts it, so you can deploy before the whole world upgrades.</p>
       </div>
       <div class="button-row" role="group" aria-label="certificate view">
         <button type="button" data-action="cert-view" data-view="classical" aria-pressed="${mode === 'classical'}" class="chip ${mode === 'classical' ? 'active' : ''}">Classical</button>
         <button type="button" data-action="cert-view" data-view="hybrid" aria-pressed="${mode === 'hybrid'}" class="chip ${mode === 'hybrid' ? 'active' : ''}">Hybrid</button>
         <button type="button" data-action="cert-view" data-view="pure_pq" aria-pressed="${mode === 'pure_pq'}" class="chip ${mode === 'pure_pq' ? 'active' : ''}">Pure PQ</button>
       </div>
-      <div class="cert-grid">
-        <article class="card ${mode === 'classical' ? 'focus' : ''}">
-          <h3>Classical ECDSA-P256</h3>
-          <p>Leaf cert: <strong>${numberFmt(classicalSize)} bytes</strong></p>
-          <p>Public key ${size ? numberFmt(size.classicalPubKey) : 33} B · signature ${size ? numberFmt(size.classicalSig) : 64} B</p>
-        </article>
-        <article class="card ${mode === 'hybrid' ? 'focus' : ''}">
-          <h3>Hybrid ECDSA-P256 + ML-DSA-65</h3>
-          <p>Leaf cert: <strong>${numberFmt(hybridSize)} bytes (${mult}× larger)</strong></p>
-          <p>Carries both public keys and both signatures.</p>
-          <p>Crypto material alone grows ~${cryptoRatio}× vs classical.</p>
-        </article>
-        <article class="card ${mode === 'pure_pq' ? 'focus' : ''}">
-          <h3>Pure ML-DSA-65 (future)</h3>
-          <p>Leaf cert: <strong>${numberFmt(purePqSize)} bytes</strong></p>
-          <p>Public key ${size ? numberFmt(size.pqPubKey) : 1952} B · signature ${size ? numberFmt(size.pqSig) : 3309} B</p>
-        </article>
-      </div>
-      <div class="metrics">
-        <div><span>Shared X.509 envelope</span><strong>${size ? numberFmt(size.envelope) : '1,100'} bytes</strong></div>
-        <div><span>Classical Sig</span><strong>${size ? numberFmt(size.classicalSig) : '-'} bytes</strong></div>
-        <div><span>PQ Sig (ML-DSA-65)</span><strong>${size ? numberFmt(size.pqSig) : '-'} bytes</strong></div>
-        <div><span>PQ Pub Key</span><strong>${size ? numberFmt(size.pqPubKey) : '-'} bytes</strong></div>
+      <div class="card cert-bars">
+        <h3>What it costs: byte-for-byte, to scale</h3>
+        <p class="small-note">All three bars share one byte scale, so the widths are directly comparable. Switch the view above and watch the post-quantum segments slide in — the ML-DSA-65 signature alone (${size ? numberFmt(size.pqSig) : '3,309'} B) dwarfs the entire classical certificate.</p>
+        ${renderCertBar('Classical ECDSA-P256', classicalSegs, scaleMax, mode === 'classical')}
+        ${renderCertBar(`Hybrid ECDSA-P256 + ML-DSA-65 (${mult}× larger)`, hybridSegs, scaleMax, mode === 'hybrid')}
+        ${renderCertBar('Pure ML-DSA-65 (future)', purePqSegs, scaleMax, mode === 'pure_pq')}
+        <ul class="cert-legend" aria-hidden="true">
+          <li><span class="swatch seg-envelope"></span>X.509 envelope (shared: issuer/subject/validity/serial, ASN.1 framing)</li>
+          <li><span class="swatch seg-classicalPub"></span>ECDSA pubkey</li>
+          <li><span class="swatch seg-classicalSig"></span>ECDSA signature</li>
+          <li><span class="swatch seg-pqPub"></span>ML-DSA pubkey</li>
+          <li><span class="swatch seg-pqSig"></span>ML-DSA signature</li>
+        </ul>
+        <p class="small-note">The whole leaf grows <strong>${mult}×</strong> (${numberFmt(classicalSize)} → ${numberFmt(hybridSize)} B) because the shared envelope stays fixed. Isolate just the crypto material — public key plus signature — and it grows roughly <strong>${cryptoRatio}×</strong>. The pure-PQ leaf (${numberFmt(purePqSize)} B) is barely smaller than hybrid: you pay almost the full PQ cost either way, so hybrid’s extra classical bytes buy backward compatibility cheaply.</p>
       </div>
 
       <div class="card tamper-lab">
@@ -708,6 +907,7 @@ function renderCertificateExhibit(): string {
           <button type="button" data-action="cert-tamper" data-tamper="body" aria-pressed="${state.certTamper === 'body'}" class="chip ${state.certTamper === 'body' ? 'active' : ''}">Alter cert body</button>
           <button type="button" data-action="cert-tamper" data-tamper="none" aria-pressed="${state.certTamper === 'none'}" class="chip ${state.certTamper === 'none' ? 'active' : ''}">Reset / re-issue</button>
         </div>
+        ${renderCertStructure(validation)}
         <div class="sig-grid" role="group" aria-label="signature verification status">
           ${sigIndicator('Classical ECDSA-P256', validation?.classicalValid)}
           ${sigIndicator('Post-Quantum ML-DSA-65', validation?.pqValid)}
@@ -733,6 +933,73 @@ function summarizeRotation(result: Awaited<ReturnType<typeof simulateRotation>> 
     : `Rotation halted and rolled back after ${result.totalSteps} steps. Final readiness: ${pct(readiness.readinessPercent)}.`;
 }
 
+// A small, honest picture of the fleet: one dot per sampled server, coloured by
+// its ACTUAL post-simulation status (classical / hybrid / pure-PQ), with the
+// real canary server highlighted. On a rolled-back run every dot is back to
+// classical — exactly what the log and metrics report, now visible at a glance.
+// State is shown with a label + shape class, never colour alone.
+function renderFleetGrid(): string {
+  const servers = state.rotationSummary?.finalState ?? state.rotationServers;
+  if (servers.length === 0) return '';
+  // The canary is the single server the deploy_to_canary step touched.
+  const canaryStep = state.rotationLogs.find((s) => s.action === 'deploy_to_canary');
+  const canaryId = canaryStep?.affectedServers[0] ?? null;
+
+  // Sample evenly to at most 120 dots so 1,247 servers stay a readable grid, but
+  // always include the canary so it is never sampled out.
+  const MAX = 120;
+  const stride = Math.max(1, Math.ceil(servers.length / MAX));
+  const sample = servers.filter((_, i) => i % stride === 0);
+  if (canaryId && !sample.some((s) => s.id === canaryId)) {
+    const canary = servers.find((s) => s.id === canaryId);
+    if (canary) sample.unshift(canary);
+  }
+
+  const statusLabel: Record<string, string> = {
+    classical_only: 'classical only',
+    hybrid_dual_signed: 'hybrid',
+    pq_only: 'pure PQ',
+    rotating: 'rotating',
+  };
+  const shapeClass: Record<string, string> = {
+    classical_only: 'dot-classical',
+    hybrid_dual_signed: 'dot-hybrid',
+    pq_only: 'dot-pq',
+    rotating: 'dot-rotating',
+  };
+
+  const dots = sample
+    .map((s) => {
+      const isCanary = s.id === canaryId;
+      const label = `${s.id} (${s.location}): ${statusLabel[s.status] ?? s.status}${isCanary ? ', canary' : ''}`;
+      return `<span class="fleet-dot ${shapeClass[s.status] ?? ''} ${isCanary ? 'is-canary' : ''}" role="img" aria-label="${label}" title="${label}">${isCanary ? '★' : ''}</span>`;
+    })
+    .join('');
+
+  const ran = Boolean(state.rotationSummary);
+  const caption = !ran
+    ? `Fleet before rotation: all ${numberFmt(servers.length)} servers on classical-only certificates.`
+    : state.rotationSummary?.rolledBack
+      ? `After rollback: every server is back on classical-only certificates — the canary (★) failed its gate before the fleet was committed.`
+      : `After rotation: servers recoloured to hybrid. The canary (★) went first and was watched before the staged rollout followed.`;
+
+  return `
+    <div class="card fleet-card">
+      <h3>The fleet, one dot per server</h3>
+      <div class="fleet-grid" role="group" aria-label="Fleet rotation status, ${numberFmt(sample.length)} sampled servers of ${numberFmt(servers.length)}">
+        ${dots}
+      </div>
+      <p class="small-note">${caption} Showing ${numberFmt(sample.length)} of ${numberFmt(servers.length)} servers.</p>
+      <ul class="fleet-legend" aria-hidden="true">
+        <li><span class="fleet-dot dot-classical"></span>Classical only</li>
+        <li><span class="fleet-dot dot-hybrid"></span>Hybrid</li>
+        <li><span class="fleet-dot dot-pq"></span>Pure PQ</li>
+        <li><span class="fleet-dot is-canary dot-hybrid">★</span>Canary</li>
+      </ul>
+    </div>
+  `;
+}
+
 function renderRotationExhibit(): string {
   const readiness = fleetReadinessScore(state.rotationSummary?.finalState ?? state.rotationServers);
   const latestLogs = state.rotationLogs.slice(-8);
@@ -740,8 +1007,9 @@ function renderRotationExhibit(): string {
   return `
     <section class="panel" id="rotation" aria-labelledby="rotation-title">
       <div class="panel-head">
-        <h2 id="rotation-title">Exhibit 4: Live Rotation Simulation</h2>
+        <h2 id="rotation-title">Step 5 — How to deploy safely (Fleet rotation)</h2>
         <p>Canary-first staged rollout with mandatory monitoring gates and automatic rollback.</p>
+        <p class="gloss"><strong>Canary</strong> = deploy the change to exactly one server first (like a canary in a coal mine) and watch it. If it stays healthy through the monitoring window you widen the rollout; if it fails, the fleet automatically <em>rolls back</em> to its previous classical-only certificates before most traffic is ever affected.</p>
       </div>
       <div class="controls card">
         <label>Canary percent <input id="canaryPercent" type="number" min="1" max="20" step="1" value="10"></label>
@@ -764,6 +1032,7 @@ function renderRotationExhibit(): string {
         <div><span>Pure PQ</span><strong>${pct((readiness.pqOnly / Math.max(1, state.rotationServers.length)) * 100)}</strong></div>
         <div><span>Traffic on Hybrid or PQ</span><strong>${pct(readiness.totalTrafficOnHybridOrPQ)}</strong></div>
       </div>
+      ${renderFleetGrid()}
       <div class="card" role="status" aria-live="polite" aria-atomic="true">
         <h3>Fleet Status: ${numberFmt(state.rotationServers.length)} servers in 5 regions</h3>
         <p>${summarizeRotation(state.rotationSummary)}</p>
@@ -776,58 +1045,76 @@ function renderRotationExhibit(): string {
   `;
 }
 
-function renderPrayerWarriorsExhibit(): string {
+// Four-step spine: the causal story a newcomer needs. Urgency justifies the
+// hybrid fix; the fix has a size cost; deadlines sequence the work; rotation
+// deploys it without an outage. Each step links to its exhibit.
+function renderStepper(): string {
+  const steps: Array<{ href: string; n: string; title: string; blurb: string }> = [
+    { href: '#inventory', n: '1', title: 'Are you already late?', blurb: 'Mosca’s inequality decides urgency from your inventory.' },
+    { href: '#certs', n: '2', title: 'The fix: hybrid certs', blurb: 'One cert both a classical and a PQ verifier can trust.' },
+    { href: '#certs', n: '3', title: 'What it costs', blurb: 'The PQ signature makes the cert roughly 5× larger.' },
+    { href: '#timeline', n: '4', title: 'Deploy safely', blurb: 'Deadlines sequence the phases; canary rollout ships it.' },
+  ];
   return `
-    <section class="panel" id="prayer-warriors" aria-labelledby="prayer-warriors-title">
-      <div class="panel-head">
-        <h2 id="prayer-warriors-title">Exhibit 5: PrayerWarriors.Mobi Migration Plan</h2>
-        <p>Designing a new platform in 2026: build crypto-agility now, avoid a retrofit crisis in 2030.</p>
-      </div>
-      <div class="card">
-        <h3>Recommended Architecture</h3>
-        <ul>
-          <li>TLS 1.3 with X25519MLKEM768 hybrid KEM for client-server sessions.</li>
-          <li>Hybrid certificates (ECDSA-P256 + ML-DSA-65) from day 1 for edge services.</li>
-          <li>JWT and service signatures on ML-DSA-65 where ecosystem compatibility allows.</li>
-          <li>Symmetric data protection with AES-256-GCM for prayer content and backups.</li>
-          <li>90-day key rotation with documented rollback runbooks and canary rollout.</li>
-        </ul>
-      </div>
-      <div class="metrics">
-        <div><span>Day-1 PQ-aware build cost</span><strong>+15% engineering effort</strong></div>
-        <div><span>Retrofit later</span><strong>+60% effort, outage risk</strong></div>
-        <div><span>Migration strategy</span><strong>Hybrid then pure PQ</strong></div>
-        <div><span>Target posture</span><strong>Crypto-agile by design</strong></div>
-      </div>
-      <div class="links">
-        <a href="https://github.com/systemslibrarian/crypto-lab-pq-tls-handshake" target="_blank" rel="noreferrer">crypto-lab-pq-tls-handshake</a>
-        <a href="https://github.com/systemslibrarian/crypto-lab-kyber-vault" target="_blank" rel="noreferrer">crypto-lab-kyber-vault</a>
-        <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-seal" target="_blank" rel="noreferrer">crypto-lab-dilithium-seal</a>
-        <a href="https://github.com/systemslibrarian/crypto-lab-hybrid-sign" target="_blank" rel="noreferrer">crypto-lab-hybrid-sign</a>
-      </div>
-    </section>
+    <nav class="stepper" aria-label="Guided path through this demo">
+      <p class="stepper-lead"><strong>Start here.</strong> This demo tells one story in four steps — follow them in order, or jump to any step.</p>
+      <ol class="stepper-list">
+        ${steps
+          .map(
+            (step) => `
+          <li>
+            <a href="${step.href}">
+              <span class="stepper-num" aria-hidden="true">${step.n}</span>
+              <span class="stepper-body"><strong>${step.title}</strong><span>${step.blurb}</span></span>
+            </a>
+          </li>`,
+          )
+          .join('')}
+      </ol>
+    </nav>
   `;
 }
 
-function renderAccessibilityExhibit(): string {
+// The two exhibits that taught nothing about crypto (a fictional customer
+// architecture card and a self-congratulatory accessibility checklist) are
+// demoted behind an "About this demo" fold so the main page reads as four
+// focused crypto lessons. They are still reachable, just no longer diluting
+// the learning arc.
+function renderAboutFold(): string {
   return `
-    <section class="panel" id="accessibility" aria-labelledby="accessibility-title">
-      <div class="panel-head">
-        <h2 id="accessibility-title">Exhibit 6: Accessibility Checklist</h2>
-        <p>Operational controls verified for mobile usability and assistive-technology compatibility.</p>
+    <details class="about-fold" id="about">
+      <summary>About this demo &amp; further reading</summary>
+      <div class="about-body">
+        <div class="card">
+          <h3>Worked example: designing PQ-aware from day one</h3>
+          <p class="small-note">A greenfield 2026 platform can bake in crypto-agility now instead of paying for a retrofit crisis in 2030.</p>
+          <ul>
+            <li>TLS 1.3 with the X25519MLKEM768 hybrid key exchange for client–server sessions.</li>
+            <li>Hybrid certificates (ECDSA-P256 + ML-DSA-65) from day 1 for edge services.</li>
+            <li>JWT and service signatures on ML-DSA-65 where ecosystem compatibility allows.</li>
+            <li>Symmetric data protection with AES-256-GCM for content and backups.</li>
+            <li>90-day key rotation with documented rollback runbooks and canary rollout.</li>
+          </ul>
+          <p class="small-note">Building PQ-aware up front costs an estimated +15% engineering effort; retrofitting later is closer to +60% effort with real outage risk.</p>
+        </div>
+        <div class="card">
+          <h3>How this demo is built to be accessible</h3>
+          <p class="small-note">Verified in CI with automated WCAG 2.1 AA checks (axe-core) on every commit:</p>
+          <ul class="checklist" aria-label="Accessibility notes">
+            <li><span class="check ok" aria-hidden="true">[OK]</span><span>Keyboard-first navigation with visible focus outlines and a skip link.</span></li>
+            <li><span class="check ok" aria-hidden="true">[OK]</span><span>Live rotation status announces updates on polite and alert channels.</span></li>
+            <li><span class="check ok" aria-hidden="true">[OK]</span><span>State is shown with text and shape, never colour alone.</span></li>
+            <li><span class="check ok" aria-hidden="true">[OK]</span><span>Reduced-motion preference is honoured for the byte-flip and slide animations.</span></li>
+          </ul>
+        </div>
+        <div class="links">
+          <a href="https://github.com/systemslibrarian/crypto-lab-pq-tls-handshake" target="_blank" rel="noreferrer">crypto-lab-pq-tls-handshake</a>
+          <a href="https://github.com/systemslibrarian/crypto-lab-kyber-vault" target="_blank" rel="noreferrer">crypto-lab-kyber-vault</a>
+          <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-seal" target="_blank" rel="noreferrer">crypto-lab-dilithium-seal</a>
+          <a href="https://github.com/systemslibrarian/crypto-lab-hybrid-sign" target="_blank" rel="noreferrer">crypto-lab-hybrid-sign</a>
+        </div>
       </div>
-      <div class="card">
-        <ul class="checklist" aria-label="Accessibility and usability checklist">
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Keyboard-first navigation with visible focus outlines.</span></li>
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Skip link to jump directly to the first exhibit.</span></li>
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Form controls validate input and report clear error states.</span></li>
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Live rotation status announces updates with polite and alert channels.</span></li>
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Responsive layout supports narrow screens and touch-sized controls.</span></li>
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Reduced-motion preference honored for users with vestibular sensitivity.</span></li>
-          <li><span class="check ok" aria-hidden="true">[OK]</span><span>Data tables include caption and semantic column headers.</span></li>
-        </ul>
-      </div>
-    </section>
+    </details>
   `;
 }
 
@@ -841,7 +1128,7 @@ function renderVerificationExhibit(): string {
   return `
     <section class="panel" id="verify" aria-labelledby="verify-title">
       <div class="panel-head">
-        <h2 id="verify-title">Exhibit 7: Verify the Cryptography Yourself</h2>
+        <h2 id="verify-title">Prove it — verify the cryptography yourself</h2>
         <p>This lab uses real primitives, not mock-ups. These self-tests issue and verify certificates, detect tampering, build migration plans, and run a full rotation with rollback — then report whether each property actually held.</p>
       </div>
       <div class="button-row" role="group" aria-label="verification controls">
@@ -925,13 +1212,13 @@ function renderDashboard(): void {
           <p class="cl-hero-why-text">A future quantum computer can decrypt data adversaries record today. Deciding when to migrate, shipping certificates both classical and PQ verifiers trust, and rotating a fleet without an outage is a program, not a one-day swap.</p>
         </aside>
       </header>
+      ${renderStepper()}
       ${renderInventoryExhibit(demo, riskRows)}
-      ${renderTimelineExhibit(demo, framework)}
       ${renderCertificateExhibit()}
+      ${renderTimelineExhibit(demo, framework)}
       ${renderRotationExhibit()}
-      ${renderPrayerWarriorsExhibit()}
-      ${renderAccessibilityExhibit()}
       ${renderVerificationExhibit()}
+      ${renderAboutFold()}
     </main>
 <footer style="margin-top:3rem;padding:2rem 1rem;border-top:1px solid rgba(128,128,128,.25);text-align:center;font-size:.85rem;line-height:1.9;opacity:.85;font-family:ui-monospace,Menlo,Consolas,monospace">
   <div><strong>Related demos:</strong> <a href="https://systemslibrarian.github.io/crypto-lab-harvest-timeline/" style="color:#35d6bb">harvest-timeline</a> &middot; <a href="https://systemslibrarian.github.io/crypto-lab-hybrid-sign/" style="color:#35d6bb">hybrid-sign</a> &middot; <a href="https://systemslibrarian.github.io/crypto-lab-pki-chain/" style="color:#35d6bb">pki-chain</a> &middot; <a href="https://systemslibrarian.github.io/crypto-lab-pq-families/" style="color:#35d6bb">pq-families</a> &middot; <a href="https://systemslibrarian.github.io/crypto-lab-pq-tls-handshake/" style="color:#35d6bb">pq-tls-handshake</a></div>
