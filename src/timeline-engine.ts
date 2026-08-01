@@ -162,17 +162,17 @@ export const CNSA_2_0: RegulatoryFramework = {
   milestones: [
     {
       date: utcDate(2025, 1, 1),
-      description: 'Begin incorporating PQC into new National Security Systems.',
+      description: 'NSS software/firmware signing, web servers and cloud services support and prefer CNSA 2.0.',
       category: 'planning',
     },
     {
-      date: utcDate(2027, 1, 1),
-      description: 'Software and firmware signing for NSS must use PQC.',
+      date: utcDate(2030, 1, 1),
+      description: 'Software and firmware signing for NSS must use CNSA 2.0 exclusively.',
       category: 'pilot',
     },
     {
-      date: utcDate(2030, 1, 1),
-      description: 'Web servers and cloud services handling NSS data must support PQC.',
+      date: utcDate(2033, 1, 1),
+      description: 'Web browsers, servers and cloud services handling NSS data must use CNSA 2.0 exclusively.',
       category: 'high_risk',
     },
     {

@@ -875,7 +875,7 @@ function renderCertificateExhibit(): string {
       <div class="panel-head">
         <h2 id="certs-title">Steps 2 &amp; 3 — The fix and its cost (Hybrid certificate)</h2>
         <p>A real X.509-style leaf certificate dual-signed with classical ECDSA-P256 and PQ ML-DSA-65, per the <em>composite-signature</em> drafts. Every byte size below is measured from the actual keys and signatures generated in your browser.</p>
-        <p class="gloss"><strong>Composite signature</strong> = one certificate carrying two independent signatures (a classical one and a post-quantum one) that must <em>both</em> verify; a verifier that only understands the old algorithm still accepts it, so you can deploy before the whole world upgrades.</p>
+        <p class="gloss"><strong>Composite signature</strong> = one certificate carrying two independent signatures (a classical one and a post-quantum one) that must <em>both</em> verify, treated as one atomic algorithm with its own OID. It hedges algorithm risk — the certificate stays trustworthy if either algorithm is broken — but it is <em>not</em> backward compatible: a legacy verifier that only knows ECDSA does not recognise the composite OID and rejects the certificate, which is why migration has to be staged.</p>
       </div>
       <div class="button-row" role="group" aria-label="certificate view">
         <button type="button" data-action="cert-view" data-view="classical" aria-pressed="${mode === 'classical'}" class="chip ${mode === 'classical' ? 'active' : ''}">Classical</button>
@@ -1051,7 +1051,7 @@ function renderRotationExhibit(): string {
 function renderStepper(): string {
   const steps: Array<{ href: string; n: string; title: string; blurb: string }> = [
     { href: '#inventory', n: '1', title: 'Are you already late?', blurb: 'Mosca’s inequality decides urgency from your inventory.' },
-    { href: '#certs', n: '2', title: 'The fix: hybrid certs', blurb: 'One cert both a classical and a PQ verifier can trust.' },
+    { href: '#certs', n: '2', title: 'The fix: hybrid certs', blurb: 'One cert carrying a classical and a PQ signature — both must verify.' },
     { href: '#certs', n: '3', title: 'What it costs', blurb: 'The PQ signature makes the cert roughly 5× larger.' },
     { href: '#timeline', n: '4', title: 'Deploy safely', blurb: 'Deadlines sequence the phases; canary rollout ships it.' },
   ];
