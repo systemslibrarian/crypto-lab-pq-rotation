@@ -12,6 +12,7 @@
   --canary: #00d4ff;
   --rollback: #ffaa00;
   --line: rgba(170, 194, 211, 0.22);
+  --control-line: #647b8d;
   --card: rgba(5, 15, 24, 0.72);
   --focus: rgba(0, 212, 255, 0.12);
   --radius: 16px;
@@ -373,6 +374,11 @@ button {
   color: var(--ink);
   font-family: var(--mono);
   padding: 10px;
+}
+
+input:not([type="range"]),
+select {
+  border-color: var(--control-line);
 }
 
 .run {
