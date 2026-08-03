@@ -320,6 +320,16 @@ const state = {
   rotationServers: createFleet(1247),
   rotationLogs: [] as RotationStep[],
   rotationSummary: null as Awaited<ReturnType<typeof simulateRotation>> | null,
+  // The dashboard is re-rendered from `state` on every interaction, so the
+  // rotation form's values have to live here too. While they were hardcoded into
+  // the markup, ANY re-render — the simulation run itself, a Mosca slider, a
+  // tamper button — silently reset the operator's canary percent, monitoring
+  // window, stages and failure injection back to the defaults, leaving the form
+  // reading "No failure" directly above "Rotation failed a phase gate".
+  rotationCanaryPercent: '10',
+  rotationMonitorHours: '24',
+  rotationStages: '10,50,100',
+  rotationFailureStep: 'none',
   verifyResults: null as VerifyEntry[] | null,
   verifyRunning: false,
   uiMessage: '' as string,
@@ -976,11 +986,27 @@ function renderFleetGrid(): string {
     })
     .join('');
 
+  // Name the gate that ACTUALLY failed. This used to blame the canary for every
+  // rollback, which contradicted the log directly below it whenever the failure
+  // was injected at a later stage: the canary had been monitored and promoted,
+  // and it was the 50% (or 100%) rollout that tripped. The failed step is the
+  // one the simulator marked success:false, and the share of the fleet it
+  // touched is the stage it was.
+  const failedStep = state.rotationLogs.find((step) => !step.success);
+  const failedOnCanary =
+    failedStep !== undefined && canaryId !== null && failedStep.affectedServers.length === 1 && failedStep.affectedServers[0] === canaryId;
+  const failedStagePercent = failedStep ? Math.round((failedStep.affectedServers.length / Math.max(1, servers.length)) * 100) : 0;
+  const rollbackCause = !failedStep
+    ? 'a phase gate failed before the fleet was committed'
+    : failedOnCanary
+      ? 'the canary (★) failed its gate before the fleet was committed'
+      : `the ${failedStagePercent}% rollout stage failed its gate, after the canary (★) had already been promoted`;
+
   const ran = Boolean(state.rotationSummary);
   const caption = !ran
     ? `Fleet before rotation: all ${numberFmt(servers.length)} servers on classical-only certificates.`
     : state.rotationSummary?.rolledBack
-      ? `After rollback: every server is back on classical-only certificates — the canary (★) failed its gate before the fleet was committed.`
+      ? `After rollback: every server is back on classical-only certificates — ${rollbackCause}.`
       : `After rotation: servers recoloured to hybrid. The canary (★) went first and was watched before the staged rollout followed.`;
 
   return `
@@ -1000,6 +1026,16 @@ function renderFleetGrid(): string {
   `;
 }
 
+// The failure-injection points the simulator understands. Rendered from this
+// list so the selected option survives a re-render (see state.rotationFailureStep).
+const FAILURE_STEPS: Array<{ value: string; label: string }> = [
+  { value: 'none', label: 'No failure' },
+  { value: 'rotate_10', label: 'At 10% rollout' },
+  { value: 'monitor_10', label: 'After 10% monitoring' },
+  { value: 'rotate_50', label: 'At 50% rollout' },
+  { value: 'rotate_100', label: 'At 100% rollout' },
+];
+
 function renderRotationExhibit(): string {
   const readiness = fleetReadinessScore(state.rotationSummary?.finalState ?? state.rotationServers);
   const latestLogs = state.rotationLogs.slice(-8);
@@ -1012,16 +1048,15 @@ function renderRotationExhibit(): string {
         <p class="gloss"><strong>Canary</strong> = deploy the change to exactly one server first (like a canary in a coal mine) and watch it. If it stays healthy through the monitoring window you widen the rollout; if it fails, the fleet automatically <em>rolls back</em> to its previous classical-only certificates before most traffic is ever affected.</p>
       </div>
       <div class="controls card">
-        <label>Canary percent <input id="canaryPercent" type="number" min="1" max="20" step="1" value="10"></label>
-        <label>Monitoring hours <input id="monitorHours" type="number" min="1" max="72" step="1" value="24"></label>
-        <label>Rollout stages (%) <input id="rolloutStages" type="text" value="10,50,100"></label>
+        <label>Canary percent <input id="canaryPercent" type="number" min="1" max="20" step="1" value="${state.rotationCanaryPercent}"></label>
+        <label>Monitoring hours <input id="monitorHours" type="number" min="1" max="72" step="1" value="${state.rotationMonitorHours}"></label>
+        <label>Rollout stages (%) <input id="rolloutStages" type="text" value="${state.rotationStages}"></label>
         <label>Failure injection
           <select id="failureStep">
-            <option value="none">No failure</option>
-            <option value="rotate_10">At 10% rollout</option>
-            <option value="monitor_10">After 10% monitoring</option>
-            <option value="rotate_50">At 50% rollout</option>
-            <option value="rotate_100">At 100% rollout</option>
+            ${FAILURE_STEPS.map(
+              (option) =>
+                `<option value="${option.value}" ${option.value === state.rotationFailureStep ? 'selected' : ''}>${option.label}</option>`,
+            ).join('')}
           </select>
         </label>
         <button type="button" data-action="run-rotation" class="run">Run Rotation</button>
@@ -1330,6 +1365,18 @@ function bindEvents(): void {
     }
   });
 
+  // Mirror the rotation form into state as it is typed, so a later re-render
+  // redraws what the operator entered instead of the hardcoded defaults. No
+  // re-render is triggered here — that would fight the caret mid-keystroke.
+  const bindControl = (selector: string, event: 'input' | 'change', apply: (value: string) => void): void => {
+    const element = document.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
+    element?.addEventListener(event, () => apply(element.value));
+  };
+  bindControl('#canaryPercent', 'input', (value) => (state.rotationCanaryPercent = value));
+  bindControl('#monitorHours', 'input', (value) => (state.rotationMonitorHours = value));
+  bindControl('#rolloutStages', 'input', (value) => (state.rotationStages = value));
+  bindControl('#failureStep', 'change', (value) => (state.rotationFailureStep = value));
+
   const verifyButton = document.querySelector<HTMLButtonElement>('button[data-action="run-verify"]');
   verifyButton?.addEventListener('click', async () => {
     if (state.verifyRunning) {
@@ -1355,11 +1402,17 @@ function bindEvents(): void {
       state.uiMessage = '';
       state.uiMessageTone = 'info';
 
-      const canary = Number((document.querySelector<HTMLInputElement>('#canaryPercent')?.value ?? '10').trim());
-      const monitoringHours = Number((document.querySelector<HTMLInputElement>('#monitorHours')?.value ?? '24').trim());
-      const stageText = document.querySelector<HTMLInputElement>('#rolloutStages')?.value ?? '10,50,100';
-      const stageValues = normalizeRolloutStages(stageText);
-      const failureStep = document.querySelector<HTMLSelectElement>('#failureStep')?.value ?? 'none';
+      // Take the live DOM values as authoritative and write them back to state,
+      // so the form the re-render draws afterwards is the form that was run.
+      state.rotationCanaryPercent = document.querySelector<HTMLInputElement>('#canaryPercent')?.value ?? state.rotationCanaryPercent;
+      state.rotationMonitorHours = document.querySelector<HTMLInputElement>('#monitorHours')?.value ?? state.rotationMonitorHours;
+      state.rotationStages = document.querySelector<HTMLInputElement>('#rolloutStages')?.value ?? state.rotationStages;
+      state.rotationFailureStep = document.querySelector<HTMLSelectElement>('#failureStep')?.value ?? state.rotationFailureStep;
+
+      const canary = Number(state.rotationCanaryPercent.trim());
+      const monitoringHours = Number(state.rotationMonitorHours.trim());
+      const stageValues = normalizeRolloutStages(state.rotationStages);
+      const failureStep = state.rotationFailureStep;
 
       const safeCanary = Number.isFinite(canary) ? Math.round(canary) : 10;
       const safeMonitoring = Number.isFinite(monitoringHours) ? Math.round(monitoringHours) : 24;
