@@ -23,8 +23,7 @@ async function killMotion(page: Page): Promise<void> {
   await page.addStyleTag({
     content: `*,*::before,*::after{
       animation-duration:0s!important;animation-delay:0s!important;
-      transition-duration:0s!important;transition-delay:0s!important;
-      opacity:1!important;scroll-behavior:auto!important;
+      transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important;
     }`,
   });
 }
