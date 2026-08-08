@@ -4,7 +4,10 @@
   --bg-2: #153b4d;
   --panel: rgba(8, 20, 33, 0.7);
   --ink: #e8f1f7;
-  --muted: #c2d5e2;
+  /* Lightened from #c2d5e2: measured 4.14:1 where a .gloss panel tints the
+     surface toward cyan, which is a lighter backdrop than the plain panel it
+     was tuned against. Text-only token (22 uses, no fills). */
+  --muted: #d2e2ee;
   --legacy: #ff3366;
   --hybrid: #ffd700;
   --pq: #00ff88;
@@ -75,6 +78,11 @@ main.dashboard {
   margin: 0 auto;
   padding: 32px 0 56px;
   display: grid;
+  /* `minmax(0, 1fr)`, not the default `auto` track. `width: min(1200px, 96vw)`
+     bounds this element but says nothing about the track sizing its children,
+     so the widest card's min-content sized the column and the document scrolled
+     to 785px at a 380px viewport. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
 }
 
@@ -750,7 +758,11 @@ input[type="range"]:focus-visible {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px;
-  background: rgba(5, 15, 24, 0.55);
+  /* Opaque, not `rgba(5, 15, 24, 0.55)`: at 55% these cards composited to a
+     mid-grey against whatever sat behind them, and BOTH --ink and --muted
+     failed on that (4.11:1 and 3.56:1). A card that carries body text should
+     not let its own contrast depend on the backdrop. */
+  background: var(--bg-0);
   height: 100%;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
@@ -1205,11 +1217,17 @@ input[type="range"]:focus-visible {
   }
 
   .timeline-track {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not a bare 1fr: a bare fr track keeps an automatic
+       minimum of min-content, which is how a wide child sizes the column at
+       exactly the width where it must not. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .metrics {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not a bare 1fr: a bare fr track keeps an automatic
+       minimum of min-content, which is how a wide child sizes the column at
+       exactly the width where it must not. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .phase-grid > div {
@@ -1224,7 +1242,10 @@ input[type="range"]:focus-visible {
   }
 
   .controls {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not a bare 1fr: a bare fr track keeps an automatic
+       minimum of min-content, which is how a wide child sizes the column at
+       exactly the width where it must not. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .run {
@@ -1232,7 +1253,10 @@ input[type="range"]:focus-visible {
   }
 
   .checklist li {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not a bare 1fr: a bare fr track keeps an automatic
+       minimum of min-content, which is how a wide child sizes the column at
+       exactly the width where it must not. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
   }
 }

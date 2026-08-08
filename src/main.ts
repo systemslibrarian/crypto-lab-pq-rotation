@@ -529,7 +529,7 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
         <button type="button" data-action="demo" data-demo="gov" aria-pressed="${state.selectedDemoKey === 'gov'}" class="chip ${state.selectedDemoKey === 'gov' ? 'active' : ''}">Load demo: Government agency</button>
         <button type="button" data-action="demo" data-demo="finance" aria-pressed="${state.selectedDemoKey === 'finance'}" class="chip ${state.selectedDemoKey === 'finance' ? 'active' : ''}">Load demo: Financial services</button>
       </div>
-      <div class="card table-wrap" role="region" aria-label="Inventory summary table">
+      <div class="card table-wrap" role="region" tabindex="0" aria-label="Inventory summary table">
         <h3>Demo inventory: ${demo.name}</h3>
         <table>
           <caption class="sr-only">Cryptographic inventory counts, algorithms, and sensitivity ranges</caption>
@@ -755,7 +755,7 @@ function renderCertStructure(validation: Awaited<ReturnType<typeof verifyHybridC
     : `<p class="flip-line small-note">No byte flipped. Untampered, every block below is intact and trust holds.</p>`;
 
   return `
-    <div class="cert-structure" aria-label="Certificate trust chain: body hashed to SHA-256, then signed by both algorithms, both of which must verify for the certificate to be trusted.">
+    <div class="cert-structure" role="group" aria-label="Certificate trust chain: body hashed to SHA-256, then signed by both algorithms, both of which must verify for the certificate to be trusted.">
       <div class="cs-block ${blockState(bodyBad)}">
         <span class="cs-title">Certificate body</span>
         <span class="cs-meta">DN, validity, serial, public keys</span>
