@@ -353,6 +353,12 @@ th {
   background: var(--focus);
 }
 
+.small-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
 .small-note {
   margin-top: 10px;
   color: var(--muted);
