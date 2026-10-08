@@ -95,6 +95,17 @@ describe('issue / verify round trip', () => {
 });
 
 describe('tamper detection (verify rejects forgery)', () => {
+  it.each(['classicalSignature', 'pqSignature'] as const)('rejects a missing or truncated %s while the other signature holds', async (field) => {
+    const { cert, ca } = await freshCert();
+    for (const value of [undefined, new Uint8Array(), cert[field].slice(1)]) {
+      const stripped = { ...cert, [field]: value } as HybridCertificate;
+      const result = await verifyHybridCertificate(stripped, ca.caClassical.publicKey, ca.caPq.publicKey);
+      expect(result.valid).toBe(false);
+      expect(result.classicalValid).toBe(field !== 'classicalSignature');
+      expect(result.pqValid).toBe(field !== 'pqSignature');
+    }
+  });
+
   it('flipping one bit of the classical signature is rejected', async () => {
     const { cert, ca } = await freshCert();
     const forged: HybridCertificate = { ...cert, classicalSignature: cert.classicalSignature.slice() };

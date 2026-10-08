@@ -910,7 +910,7 @@ function renderCertificateExhibit(): string {
 
       <div class="card tamper-lab">
         <h3>Tamper Lab: why hybrid needs <em>both</em></h3>
-        <p class="small-note">Forge one signature and watch the other hold. The verifier trusts the certificate only when both pass.</p>
+        <p class="small-note">Forge one signature and watch the other hold. This composite-style teaching model requires both signatures (AND verification). It uses a JSON body with a modeled X.509 envelope, rather than DER certificates or ITU-T Catalyst/MCA alternative-signature extensions. Backward-compatible clients that accept traditional-only replacements need an explicit policy against downgrade; adding a PQ signature alone does not enforce that policy. See <a href="https://eprint.iacr.org/2026/2297">Strenzke's October 2026 preprint</a>.</p>
         <div class="button-row" role="group" aria-label="tamper controls">
           <button type="button" data-action="cert-tamper" data-tamper="classical" aria-pressed="${state.certTamper === 'classical'}" class="chip ${state.certTamper === 'classical' ? 'active' : ''}">Forge classical sig</button>
           <button type="button" data-action="cert-tamper" data-tamper="pq" aria-pressed="${state.certTamper === 'pq'}" class="chip ${state.certTamper === 'pq' ? 'active' : ''}">Forge PQ sig</button>

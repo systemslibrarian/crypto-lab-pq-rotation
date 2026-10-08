@@ -159,8 +159,15 @@ export async function verifyHybridCertificate(
   const serializedBody = serializeCertificateBody(cert.body);
   const recomputedHash = await sha256(serializedBody);
   const hashMatches = bytesToHex(recomputedHash) === bytesToHex(cert.bodyHash);
-  const classicalValid = hashMatches && p256.verify(cert.classicalSignature, cert.bodyHash, caClassicalPubKey, { format: 'compact' });
-  const pqValid = hashMatches && ml_dsa65.verify(cert.pqSignature, cert.bodyHash, caPQPubKey);
+  // Composite-style teaching policy: require BOTH signatures. This JSON model
+  // does not implement ITU-T X.509 Catalyst/MCA alternative-signature extensions.
+  // Reject absent or truncated signatures before calling the primitive verifier.
+  const classicalValid = hashMatches && cert.classicalSignature instanceof Uint8Array
+    && cert.classicalSignature.length === 64
+    && p256.verify(cert.classicalSignature, cert.bodyHash, caClassicalPubKey, { format: 'compact' });
+  const pqValid = hashMatches && cert.pqSignature instanceof Uint8Array
+    && cert.pqSignature.length === 3_309
+    && ml_dsa65.verify(cert.pqSignature, cert.bodyHash, caPQPubKey);
   const valid = hashMatches && classicalValid && pqValid;
 
   return {

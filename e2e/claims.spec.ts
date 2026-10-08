@@ -48,6 +48,12 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const MS_PER_MONTH = 30 * 24 * 60 * 60 * 1000;
+
+test('certificate model states its construction and downgrade policy', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.getByText('This composite-style teaching model requires both signatures', { exact: false })).toContainText('ITU-T Catalyst/MCA');
+  await expect(page.getByRole('link', { name: "Strenzke's October 2026 preprint" })).toHaveAttribute('href', 'https://eprint.iacr.org/2026/2297');
+});
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
 /** ML-DSA-65 is fixed by FIPS 204; the size lesson is meaningless if it drifts. */
