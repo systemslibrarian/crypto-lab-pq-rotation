@@ -1,3 +1,4 @@
+import { renderUSFederalProfile, bindUSFederalProfile } from './us-non-nss';
 import { setModelMilestone } from './timeline-engine';
 import { p256 } from '@noble/curves/nist.js';
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
@@ -1258,6 +1259,7 @@ function renderDashboard(): void {
       ${renderInventoryExhibit(demo, riskRows)}
       ${renderCertificateExhibit()}
       ${renderTimelineExhibit(demo, framework)}
+      ${renderUSFederalProfile()}
       ${renderRotationExhibit()}
       ${renderVerificationExhibit()}
       ${renderAboutFold()}
@@ -1270,6 +1272,7 @@ function renderDashboard(): void {
   `;
 
   bindEvents();
+  bindUSFederalProfile();
   restoreFocus(focusSelector);
 }
 
