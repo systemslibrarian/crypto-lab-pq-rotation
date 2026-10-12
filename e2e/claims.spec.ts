@@ -181,7 +181,7 @@ test('the inventory tiles are exactly the table and the verdict they summarise',
   // the timeline section independently states.
   const [vulnerable, catalogued] = allNums(tiles[1].replace('Quantum-Vulnerable Systems', ''));
   expect(vulnerable).toBeLessThanOrEqual(catalogued);
-  expect(catalogued).toBe(num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .small-note'))![1]));
+  expect(catalogued).toBe(num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .planner-count'))![1]));
 
   // The Mosca verdict counts and the HNDL score are one computation shown twice:
   // score = round(exposed / catalogued * 100), and the band is that score's band.
@@ -311,7 +311,7 @@ test('switching the inventory demo replaces every figure derived from it', async
   const items = allNums(await text(page, '#inventory .metrics div:nth-child(2)'))[1];
   expect(items).not.toBe(govItems);
   expect(await text(page, '.mosca-example')).not.toBe(govWorstCase);
-  expect(num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .small-note'))![1])).toBe(items);
+  expect(num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .planner-count'))![1])).toBe(items);
   for (const row of await page.locator('.phase-row em').allTextContents()) {
     expect(num(/\d+\/(\d+) items/.exec(row)![1])).toBe(items);
   }
@@ -532,7 +532,7 @@ test('reset re-issues a certificate and retracts every forged verdict', async ({
 test('every phase bar agrees with its own count, percentage and glyph bar', async ({ page }) => {
   const rows = page.locator('.phase-row');
   await expect(rows).toHaveCount(5);
-  const items = num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .small-note'))![1]);
+  const items = num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .planner-count'))![1]);
 
   for (let index = 0; index < 5; index += 1) {
     const row = rows.nth(index);
@@ -582,7 +582,7 @@ async function expectDoomMatchesMilestones(page: Page): Promise<void> {
   const expectedFullYears = (dates[3] - now) / MS_PER_YEAR;
 
   const summary = await text(page, '.doom p:nth-of-type(2)');
-  const parsed = /first hybrid deployment in (\d+) months .*50% hybrid in (\d+) months .*full migration in ([\d.]+) years/.exec(summary);
+  const parsed = /first hybrid deployment in (\d+) months .*50% hybrid checkpoint in (\d+) months .*full migration in ([\d.]+) years/.exec(summary);
   expect(parsed, `unparsable Doom Meter: ${summary}`).not.toBeNull();
   const [firstHybrid, halfCoverage, fullYears] = parsed!.slice(1).map(Number);
 
@@ -595,9 +595,9 @@ async function expectDoomMatchesMilestones(page: Page): Promise<void> {
   // The warning sentence is the branch those three figures select, not a mood.
   const expectedWarning =
     halfCoverage > 30
-      ? '50% hybrid coverage lands dangerously close to high-risk mandates.'
+      ? '50% hybrid coverage lands dangerously close to high-risk planning targets.'
       : firstHybrid > 9
-        ? 'Late hybrid start pushes emergency cutover risk toward regulatory deadlines.'
+        ? 'Late hybrid start pushes emergency cutover risk toward planning targets.'
         : 'On schedule with focused execution.';
   expect(await text(page, '.doom p:nth-of-type(3)')).toBe(expectedWarning);
 }
@@ -626,7 +626,7 @@ test('switching framework re-derives the milestones and the Doom Meter, leaving 
   expect(await page.locator('.milestone strong').allTextContents()).not.toEqual(cnsaDates);
   await expectDoomMatchesMilestones(page);
   // Milestone descriptions come from the selected framework too.
-  await expect(page.locator('.milestone').last()).toContainText('ASD policy');
+  await expect(page.locator('.milestone').last()).toContainText('Guidance');
 });
 
 /* ------------------------------------------------------------------ *
@@ -863,4 +863,20 @@ test('the self-test suite runs every check and its headline matches the list', a
   // The suite is re-runnable — the button is not consumed by the first run.
   await expect(page.locator('button[data-action="run-verify"]')).toBeEnabled();
   await expect(page.locator('button[data-action="run-verify"]')).toHaveText('Run verification suite');
+});
+
+
+test('Canada model-date edits update planning while published milestones and scope remain intact', async ({ page }) => {
+  await page.locator('input[data-action="framework"][value="Canada_CCCS"]').check();
+  await expect(page.locator('.profile-scope')).toContainText('non-classified');
+  const official = await page.locator('.official-milestones').textContent();
+  await expect(page.locator('.official-milestones')).toContainText('annually');
+  const pilot = page.locator('input[data-action="model-date"][data-category="pilot"]');
+  await expect(pilot).toHaveValue('2028-12-31');
+  await expect(pilot.locator('..').locator('..')).toContainText('not an official milestone');
+  await pilot.fill('2029-03-01');
+  await pilot.dispatchEvent('change');
+  await expect(page.locator('input[data-action="model-date"][data-category="pilot"]')).toHaveValue('2029-03-01');
+  expect(await page.locator('.official-milestones').textContent()).toBe(official);
+  await expectDoomMatchesMilestones(page);
 });

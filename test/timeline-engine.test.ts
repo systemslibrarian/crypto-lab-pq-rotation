@@ -1,3 +1,4 @@
+import { setModelMilestone } from '../src/timeline-engine';
 import { describe, it, expect } from 'vitest';
 
 import {
@@ -151,5 +152,29 @@ describe('in-app timeline self-test suite', () => {
       hndlFlagsLongLivedData: true,
       allFrameworksPresent: true,
     });
+  });
+});
+
+
+describe('source provenance is separate from planner assumptions', () => {
+  it('ASD uses year-end guidance rather than invented June deadlines', () => {
+    expect(AUSTRALIA_ASD.milestones.find(m => m.category === 'planning')?.date.toISOString().slice(0,10)).toBe('2026-12-31');
+    expect(AUSTRALIA_ASD.milestones.find(m => m.category === 'pilot')?.date.toISOString().slice(0,10)).toBe('2028-12-31');
+    expect(AUSTRALIA_ASD.officialMilestones?.map(m => m.date)).toEqual(['By end of 2026', 'By end of 2028', 'By end of 2030']);
+  });
+  it('Canada annual reporting is included and its 2028 pilot is an editable model choice', () => {
+    expect(CANADA_CCCS.officialMilestones?.some(m => m.date.includes('annually'))).toBe(true);
+    const pilot = CANADA_CCCS.milestones.find(m => m.category === 'pilot')!;
+    const original = pilot.date.toISOString().slice(0,10);
+    const source = JSON.stringify(CANADA_CCCS.officialMilestones);
+    expect(pilot.provenance).toBe('model_choice');
+    try {
+      setModelMilestone(CANADA_CCCS, 'pilot', '2029-03-01');
+      expect(pilot.date.toISOString().slice(0,10)).toBe('2029-03-01');
+      expect(JSON.stringify(CANADA_CCCS.officialMilestones)).toBe(source);
+      expect(() => setModelMilestone(CANADA_CCCS, 'planning', '2029-03-01')).toThrow();
+    } finally { setModelMilestone(CANADA_CCCS, 'pilot', original); }
+    expect(CANADA_CCCS.scope).toContain('non-classified');
+    expect(CNSA_2_0.scope).toContain('National Security Systems');
   });
 });

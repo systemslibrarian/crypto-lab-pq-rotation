@@ -1,7 +1,7 @@
 /**
  * Migration timeline calculator for any organization.
  * Takes inventory and priorities, produces a phased roadmap
- * aligned with regulatory frameworks.
+ * using scoped policy/guidance profiles and explicit planner assumptions.
  */
 
 export interface CryptoInventoryItem {
@@ -30,10 +30,18 @@ export interface CryptoInventoryItem {
 
 export interface RegulatoryFramework {
   name: 'CNSA_2.0' | 'EU_NIS' | 'UK_NCSC' | 'Australia_ASD' | 'Germany_BSI' | 'Canada_CCCS';
+  scope?: string;
+  officialMilestones?: readonly { date: string; normalizedDate: string; wording: string; sourceUrl: string; sourceVersion: string; audience: string; status: 'guidance' | 'policy'; precision: 'year' | 'month' | 'day' }[];
   milestones: Array<{
     date: Date;
     description: string;
     category: 'planning' | 'pilot' | 'high_risk' | 'full_migration';
+    provenance?: 'guidance' | 'policy' | 'model_choice';
+    sourceUrl?: string;
+    sourceVersion?: string;
+    audience?: string;
+    datePrecision?: 'year' | 'month' | 'day';
+    sourceWording?: string;
   }>;
 }
 
@@ -239,23 +247,23 @@ export const AUSTRALIA_ASD: RegulatoryFramework = {
   name: 'Australia_ASD',
   milestones: [
     {
-      date: utcDate(2026, 6, 30),
-      description: 'Plan PQC introduction and inventory classical asymmetric dependencies against ASD guidance.',
+      date: utcDate(2026, 12, 31),
+      description: 'ASD recommends a refined PQC transition plan by the end of 2026.',
       category: 'planning',
     },
     {
-      date: utcDate(2028, 6, 30),
-      description: 'Pilot replacements for internet-facing and sensitive high-assurance services.',
+      date: utcDate(2028, 12, 31),
+      description: 'ASD recommends transition has commenced by the end of 2028, starting with critical systems and data.',
       category: 'pilot',
     },
     {
       date: utcDate(2030, 12, 31),
-      description: 'Traditional asymmetric cryptography must not be used beyond the end of 2030.',
+      description: 'Illustrative high-risk sequencing checkpoint, aligned with ASD’s end-2030 completion recommendation.',
       category: 'high_risk',
     },
     {
       date: utcDate(2030, 12, 31),
-      description: 'Full transition deadline for traditional asymmetric use under ASD policy.',
+      description: 'ASD recommends completion of PQC transition by the end of 2030.',
       category: 'full_migration',
     },
   ],
@@ -312,6 +320,63 @@ export const CANADA_CCCS: RegulatoryFramework = {
     },
   ],
 };
+
+/** Source milestones use immutable date strings; editable planning dates are copies. */
+const profiles = [CNSA_2_0, EU_NIS, UK_NCSC, AUSTRALIA_ASD, GERMANY_BSI, CANADA_CCCS];
+const profileScope: Record<RegulatoryFramework['name'], string> = {
+  'CNSA_2.0': 'US National Security Systems (NSS); not a general private-sector or non-NSS deadline. Dates below are this planner’s category mapping; verify product-specific CNSA requirements separately.',
+  EU_NIS: 'EU / critical-service planning context. These dates are illustrative model choices; no legal-compliance finding is made.',
+  UK_NCSC: 'UK NCSC guidance, primarily large organisations, critical infrastructure and bespoke IT; indicative migration horizons.',
+  Australia_ASD: 'ASD recommended milestones for organisations applying the Australian ISM; guidance rather than a blanket private-sector law.',
+  Germany_BSI: 'German / European planning context. These dates are illustrative model choices, not asserted BSI deadlines.',
+  Canada_CCCS: 'Government of Canada federal departments and agencies, non-classified IT; not a blanket private-sector requirement.',
+};
+for (const profile of profiles) {
+  profile.scope = profileScope[profile.name];
+  for (const milestone of profile.milestones) {
+    milestone.provenance = 'model_choice';
+    milestone.audience = profile.scope;
+    milestone.datePrecision = 'day';
+  }
+}
+function attachGuidance(profile: RegulatoryFramework, url: string, version: string,
+  entries: { category?: RegulatoryFramework['milestones'][number]['category']; date: string; normalizedDate: string; wording: string; precision: 'year' | 'month' }[]): void {
+  profile.officialMilestones = Object.freeze(entries.map(entry => Object.freeze({
+    ...entry, sourceUrl: url, sourceVersion: version, audience: profile.scope!, status: 'guidance' as const,
+  })));
+  for (const entry of entries) {
+    if (!entry.category) continue;
+    const milestone = profile.milestones.find(m => m.category === entry.category)!;
+    Object.assign(milestone, { date: new Date(entry.normalizedDate + 'T00:00:00Z'),
+      description: entry.wording, provenance: 'guidance', sourceUrl: url, sourceVersion: version,
+      audience: profile.scope, datePrecision: entry.precision, sourceWording: entry.wording });
+  }
+}
+attachGuidance(AUSTRALIA_ASD, 'https://www.cyber.gov.au/publication/planning-for-post-quantum-cryptography', 'Reviewed 22 September 2025', [
+  { category: 'planning', date: 'By end of 2026', normalizedDate: '2026-12-31', wording: 'Refined plan for the transition to PQC.', precision: 'year' },
+  { category: 'pilot', date: 'By end of 2028', normalizedDate: '2028-12-31', wording: 'Transition commenced, starting with critical systems and data (not a mandated hybrid pilot).', precision: 'year' },
+  { category: 'full_migration', date: 'By end of 2030', normalizedDate: '2030-12-31', wording: 'PQC transition completed.', precision: 'year' },
+]);
+attachGuidance(CANADA_CCCS, 'https://www.cyber.gc.ca/en/guidance/roadmap-migration-post-quantum-cryptography-government-canada-itsm40001', 'ITSM.40.001, 23 June 2025', [
+  { category: 'planning', date: 'April 2026', normalizedDate: '2026-04-30', wording: 'Initial departmental PQC migration plan.', precision: 'month' },
+  { date: 'Beginning April 2026 and annually after', normalizedDate: '2026-04-30', wording: 'Report migration progress annually; not modeled as a one-time rollout phase.', precision: 'month' },
+  { category: 'high_risk', date: 'End of 2031', normalizedDate: '2031-12-31', wording: 'Migration of high-priority systems complete.', precision: 'year' },
+  { category: 'full_migration', date: 'End of 2035', normalizedDate: '2035-12-31', wording: 'Migration of remaining systems complete.', precision: 'year' },
+]);
+attachGuidance(UK_NCSC, 'https://www.ncsc.gov.uk/guidance/pqc-migration-timelines', '20 March 2025', [
+  { category: 'planning', date: 'By 2028', normalizedDate: '2028-12-31', wording: 'Define goals, discover the estate and build an initial migration plan.', precision: 'year' },
+  { category: 'high_risk', date: 'By 2031', normalizedDate: '2031-12-31', wording: 'Perform early highest-priority migration and refine the roadmap.', precision: 'year' },
+  { category: 'full_migration', date: 'By 2035', normalizedDate: '2035-12-31', wording: 'Complete migration of systems, services and products.', precision: 'year' },
+]);
+
+/** Edit a planner assumption without changing source milestones. */
+export function setModelMilestone(profile: RegulatoryFramework, category: RegulatoryFramework['milestones'][number]['category'], date: string): void {
+  const milestone = profile.milestones.find(m => m.category === category);
+  if (!milestone || milestone.provenance !== 'model_choice') throw new Error('Only model-choice milestones are editable');
+  const value = new Date(date + 'T00:00:00Z');
+  if (!Number.isFinite(value.getTime())) throw new Error('Invalid planner date');
+  milestone.date = value;
+}
 
 export interface MoscaEvaluation {
   vulnerable: boolean;
