@@ -53,6 +53,17 @@ test('certificate model states its construction and downgrade policy', async ({ 
   await page.goto('./');
   await expect(page.getByText('This composite-style teaching model requires both signatures', { exact: false })).toContainText('ITU-T Catalyst/MCA');
   await expect(page.getByRole('link', { name: "Strenzke's October 2026 preprint" })).toHaveAttribute('href', 'https://eprint.iacr.org/2026/2297');
+  const costNote = page.locator('.cert-bars .small-note').last();
+  await expect(costNote).toContainText('algorithm-diversity protection cheaply, not backward compatibility');
+  await expect(costNote).not.toContainText('buy backward compatibility cheaply');
+});
+
+test('the shared skip link targets and focuses the real main landmark', async ({ page }) => {
+  const skipLink = page.locator('.cl-skip-link');
+  await expect(skipLink).toHaveAttribute('href', '#main-content');
+  await skipLink.focus();
+  await skipLink.press('Enter');
+  await expect(page.locator('#main-content')).toBeFocused();
 });
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
@@ -419,6 +430,23 @@ test('the size prose quotes the ratios the measured bytes imply', async ({ page 
   );
 });
 
+test('failed live key generation shows no fallback sizes or verification result', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis.crypto, 'getRandomValues', {
+      configurable: true,
+      value: () => {
+        throw new Error('synthetic entropy failure');
+      },
+    });
+  });
+  await page.reload();
+
+  await expect(page.locator('#certs')).toBeVisible();
+  await expect(page.locator('.cert-unavailable')).toContainText('No certificate sizes or verification result are shown');
+  await expect(page.locator('.cert-bar')).toHaveCount(0);
+  await expect(page.locator('.tamper-lab')).toHaveCount(0);
+});
+
 test('the certificate view buttons focus exactly one bar each', async ({ page }) => {
   for (const [view, index] of [['classical', 0], ['hybrid', 1], ['pure_pq', 2]] as const) {
     await page.locator(`button[data-action="cert-view"][data-view="${view}"]`).click();
@@ -759,7 +787,7 @@ test('the rotation form survives re-renders and the run honours what it says', a
 
   await page.locator('#canaryPercent').fill('15');
   await page.locator('#monitorHours').fill('2');
-  await page.locator('#rolloutStages').fill('25,75');
+  await page.locator('#rolloutStages').fill('25,75,100');
   await page.locator('#failureStep').selectOption('rotate_50');
 
   // Regression: every one of these re-renders the whole dashboard from state, and
@@ -767,32 +795,45 @@ test('the rotation form survives re-renders and the run honours what it says', a
   // none, discarding what the operator had entered.
   await page.locator('button[data-action="cert-tamper"][data-tamper="pq"]').click();
   await expect(page.locator('.tamper-verdict strong')).toHaveText('Rejected — PQ signature forged');
-  expect(await rotationForm(page)).toEqual(['15', '2', '25,75', 'rotate_50']);
+  expect(await rotationForm(page)).toEqual(['15', '2', '25,75,100', 'rotate_50']);
 
   await page.locator('#crqc-slider').fill('2040');
   await expect(page.locator('label[for="crqc-slider"] strong')).toHaveText('2040');
-  expect(await rotationForm(page)).toEqual(['15', '2', '25,75', 'rotate_50']);
+  expect(await rotationForm(page)).toEqual(['15', '2', '25,75,100', 'rotate_50']);
 
   await page.locator('button[data-action="demo"][data-demo="finance"]').click();
   await expect(page.locator('button[data-demo="finance"]')).toHaveAttribute('aria-pressed', 'true');
-  expect(await rotationForm(page)).toEqual(['15', '2', '25,75', 'rotate_50']);
+  expect(await rotationForm(page)).toEqual(['15', '2', '25,75,100', 'rotate_50']);
 
   // A stage list that is not the default is actually what gets simulated…
   await page.locator('#failureStep').selectOption('none');
   await runRotation(page);
-  expect(await rotationForm(page)).toEqual(['15', '2', '25,75', 'none']);
+  expect(await rotationForm(page)).toEqual(['15', '2', '25,75,100', 'none']);
 
   const logs = await page.locator('#rotation .log-list li').allTextContents();
   const stages = logs
     .filter((entry) => entry.includes('Rolled hybrid certificates to the'))
     .map((entry) => num(/to the (\d+)% fleet stage/.exec(entry)![1]));
-  expect(stages).toEqual([25, 75]);
-  expect(logs.some((entry) => entry.includes('Observed the canary for 2 simulated hour(s)'))).toBe(true);
+  expect(stages).toEqual([25, 75, 100]);
+  // The status card intentionally keeps only the latest eight log lines. With
+  // three rollout stages the earlier canary-monitor line has scrolled out, so
+  // assert the first retained stage monitor reflects the same 2-hour setting.
+  expect(logs.some((entry) => entry.includes('Observed 25% rollout for 4 simulated hour(s)'))).toBe(true);
 
   // …and the shortened schedule shows up in the headline duration and step count.
   const [duration, steps] = allNums(await text(page, '#rotation .card[role="status"] p'));
-  expect(duration).toBeCloseTo(3.25 + 2 + 2 * (1 + 4), 2);
-  expect(steps).toBe(4 + 2 * 2 + 1);
+  expect(duration).toBeCloseTo(3.25 + 2 + 3 * (1 + 4), 2);
+  expect(steps).toBe(4 + 3 * 2 + 1);
+});
+
+test('rotation form text cannot create markup when another control re-renders the dashboard', async ({ page }) => {
+  const payload = '" /><span data-rotation-injection="yes"></span><input value="';
+  await page.locator('#rolloutStages').fill(payload);
+
+  await page.locator('button[data-action="cert-view"][data-view="classical"]').click();
+
+  await expect(page.locator('[data-rotation-injection="yes"]')).toHaveCount(0);
+  await expect(page.locator('#rolloutStages')).toHaveValue(payload);
 });
 
 test('each out-of-range rotation input is refused by name, and the button stays alive', async ({ page }) => {
@@ -802,6 +843,7 @@ test('each out-of-range rotation input is refused by name, and the button stays 
     ['#canaryPercent', '99', '10', 'Canary percent must be between 1 and 20.'],
     ['#monitorHours', '999', '24', 'Monitoring hours must be between 1 and 72.'],
     ['#rolloutStages', 'not-a-stage-list', '10,50,100', 'Rollout stages must include values between 1 and 100, for example: 10,50,100.'],
+    ['#rolloutStages', '25,75', '10,50,100', 'Rollout stages must end at 100 before classical-only certificates can be retired.'],
   ] as const) {
     await page.locator(selector).fill(value);
     await page.locator('button[data-action="run-rotation"]').click();

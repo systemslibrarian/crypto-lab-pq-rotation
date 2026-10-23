@@ -373,14 +373,29 @@ function pct(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
-function normalizeRolloutStages(raw: string): number[] {
-  const values = raw
-    .split(',')
-    .map((part) => Number(part.trim()))
-    .filter((value) => Number.isFinite(value) && value > 0 && value <= 100);
+function escapeHTML(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
 
-  const uniqueSorted = Array.from(new Set(values)).sort((left, right) => left - right);
-  return uniqueSorted;
+function parseRolloutStages(raw: string): number[] | null {
+  const parts = raw.split(',').map((part) => part.trim());
+  if (parts.length === 0 || parts.some((part) => !/^\d+$/.test(part))) {
+    return null;
+  }
+
+  const values = parts.map(Number);
+  if (values.some((value) => !Number.isInteger(value) || value < 1 || value > 100)) {
+    return null;
+  }
+  if (values.some((value, index) => index > 0 && value <= values[index - 1]!)) {
+    return null;
+  }
+  return values;
 }
 
 function dateFmt(value: Date): string {
@@ -812,19 +827,18 @@ interface CertSegment {
   pq: boolean; // PQ segments slide in when switching Classical -> Hybrid/Pure PQ
 }
 
-// Build the labelled, to-scale segments for one certificate variant. The bytes
-// come from the real measured sizes when a cert has been issued, and fall back
-// to the spec-exact constants (P-256: 33 B key / 64 B compact sig; ML-DSA-65:
-// 1,952 B key / 3,309 B sig; shared 1,100 B X.509 envelope) before then.
+// Build the labelled, to-scale segments for one certificate variant. This is
+// called only after live key generation succeeds, so every byte shown comes
+// from the certificate that was actually issued in this browser.
 function certSegments(
   variant: 'classical' | 'hybrid' | 'pure_pq',
-  size: ReturnType<typeof analyzeCertificateSize> | null,
+  size: ReturnType<typeof analyzeCertificateSize>,
 ): CertSegment[] {
-  const envelope = size?.envelope ?? 1_100;
-  const classicalPub = size?.classicalPubKey ?? 33;
-  const classicalSig = size?.classicalSig ?? 64;
-  const pqPub = size?.pqPubKey ?? 1_952;
-  const pqSig = size?.pqSig ?? 3_309;
+  const envelope = size.envelope;
+  const classicalPub = size.classicalPubKey;
+  const classicalSig = size.classicalSig;
+  const pqPub = size.pqPubKey;
+  const pqSig = size.pqSig;
 
   const seg = (key: CertSegment['key'], label: string, bytes: number, pq: boolean): CertSegment => ({ key, label, bytes, pq });
   const env = seg('envelope', 'X.509 envelope', envelope, false);
@@ -869,15 +883,33 @@ function renderCertBar(
 
 function renderCertificateExhibit(): string {
   const size = state.certSize;
+  const introduction = `
+      <div class="panel-head">
+        <h2 id="certs-title">Steps 2 &amp; 3 — The fix and its cost (Hybrid certificate)</h2>
+        <p>A real X.509-style leaf certificate dual-signed with classical ECDSA-P256 and PQ ML-DSA-65, per the <em>composite-signature</em> drafts. Every byte size below is measured from the actual keys and signatures generated in your browser.</p>
+        <p class="gloss"><strong>Composite signature</strong> = one certificate carrying two independent signatures (a classical one and a post-quantum one) that must <em>both</em> verify, treated as one atomic algorithm with its own OID. It hedges algorithm risk — the certificate stays trustworthy if either algorithm is broken — but it is <em>not</em> backward compatible: a legacy verifier that only knows ECDSA does not recognise the composite OID and rejects the certificate, which is why migration has to be staged.</p>
+      </div>`;
+
+  if (!size) {
+    return `
+    <section class="panel" id="certs" aria-labelledby="certs-title">
+      ${introduction}
+      <div class="card cert-unavailable" role="alert">
+        <h3>Live certificate unavailable</h3>
+        <p>No certificate sizes or verification result are shown because live key generation did not complete. Refresh to retry generation.</p>
+      </div>
+    </section>`;
+  }
+
   const validation = state.certValidation;
   const mode = state.certView;
   const verdict = tamperVerdict();
 
-  const classicalSize = size?.classicalTotal ?? 1_197;
-  const hybridSize = size?.hybridTotal ?? 6_458;
-  const purePqSize = size?.purePqTotal ?? 6_361;
-  const mult = size?.hybridVsClassical ?? 5.4;
-  const cryptoRatio = size?.cryptoMaterialRatio ?? 55;
+  const classicalSize = size.classicalTotal;
+  const hybridSize = size.hybridTotal;
+  const purePqSize = size.purePqTotal;
+  const mult = size.hybridVsClassical;
+  const cryptoRatio = size.cryptoMaterialRatio;
 
   const classicalSegs = certSegments('classical', size);
   const hybridSegs = certSegments('hybrid', size);
@@ -890,11 +922,7 @@ function renderCertificateExhibit(): string {
 
   return `
     <section class="panel" id="certs" aria-labelledby="certs-title">
-      <div class="panel-head">
-        <h2 id="certs-title">Steps 2 &amp; 3 — The fix and its cost (Hybrid certificate)</h2>
-        <p>A real X.509-style leaf certificate dual-signed with classical ECDSA-P256 and PQ ML-DSA-65, per the <em>composite-signature</em> drafts. Every byte size below is measured from the actual keys and signatures generated in your browser.</p>
-        <p class="gloss"><strong>Composite signature</strong> = one certificate carrying two independent signatures (a classical one and a post-quantum one) that must <em>both</em> verify, treated as one atomic algorithm with its own OID. It hedges algorithm risk — the certificate stays trustworthy if either algorithm is broken — but it is <em>not</em> backward compatible: a legacy verifier that only knows ECDSA does not recognise the composite OID and rejects the certificate, which is why migration has to be staged.</p>
-      </div>
+      ${introduction}
       <div class="button-row" role="group" aria-label="certificate view">
         <button type="button" data-action="cert-view" data-view="classical" aria-pressed="${mode === 'classical'}" class="chip ${mode === 'classical' ? 'active' : ''}">Classical</button>
         <button type="button" data-action="cert-view" data-view="hybrid" aria-pressed="${mode === 'hybrid'}" class="chip ${mode === 'hybrid' ? 'active' : ''}">Hybrid</button>
@@ -902,7 +930,7 @@ function renderCertificateExhibit(): string {
       </div>
       <div class="card cert-bars">
         <h3>What it costs: byte-for-byte, to scale</h3>
-        <p class="small-note">All three bars share one byte scale, so the widths are directly comparable. Switch the view above and watch the post-quantum segments slide in — the ML-DSA-65 signature alone (${size ? numberFmt(size.pqSig) : '3,309'} B) dwarfs the entire classical certificate.</p>
+        <p class="small-note">All three bars share one byte scale, so the widths are directly comparable. Switch the view above and watch the post-quantum segments slide in — the ML-DSA-65 signature alone (${numberFmt(size.pqSig)} B) dwarfs the entire classical certificate.</p>
         ${renderCertBar('Classical ECDSA-P256', classicalSegs, scaleMax, mode === 'classical')}
         ${renderCertBar(`Hybrid ECDSA-P256 + ML-DSA-65 (${mult}× larger)`, hybridSegs, scaleMax, mode === 'hybrid')}
         ${renderCertBar('Pure ML-DSA-65 (future)', purePqSegs, scaleMax, mode === 'pure_pq')}
@@ -913,7 +941,7 @@ function renderCertificateExhibit(): string {
           <li><span class="swatch seg-pqPub"></span>ML-DSA pubkey</li>
           <li><span class="swatch seg-pqSig"></span>ML-DSA signature</li>
         </ul>
-        <p class="small-note">The whole leaf grows <strong>${mult}×</strong> (${numberFmt(classicalSize)} → ${numberFmt(hybridSize)} B) because the shared envelope stays fixed. Isolate just the crypto material — public key plus signature — and it grows roughly <strong>${cryptoRatio}×</strong>. The pure-PQ leaf (${numberFmt(purePqSize)} B) is barely smaller than hybrid: you pay almost the full PQ cost either way, so hybrid’s extra classical bytes buy backward compatibility cheaply.</p>
+        <p class="small-note">The whole leaf grows <strong>${mult}×</strong> (${numberFmt(classicalSize)} → ${numberFmt(hybridSize)} B) because the shared envelope stays fixed. Isolate just the crypto material — public key plus signature — and it grows roughly <strong>${cryptoRatio}×</strong>. The pure-PQ leaf (${numberFmt(purePqSize)} B) is barely smaller than hybrid: you pay almost the full PQ cost either way, so hybrid’s extra classical bytes buy algorithm-diversity protection cheaply, not backward compatibility.</p>
       </div>
 
       <div class="card tamper-lab">
@@ -1056,9 +1084,9 @@ function renderRotationExhibit(): string {
         <p class="gloss"><strong>Canary</strong> = deploy the change to exactly one server first (like a canary in a coal mine) and watch it. If it stays healthy through the monitoring window you widen the rollout; if it fails, the fleet automatically <em>rolls back</em> to its previous classical-only certificates before most traffic is ever affected.</p>
       </div>
       <div class="controls card">
-        <label>Canary percent <input id="canaryPercent" type="number" min="1" max="20" step="1" value="${state.rotationCanaryPercent}"></label>
-        <label>Monitoring hours <input id="monitorHours" type="number" min="1" max="72" step="1" value="${state.rotationMonitorHours}"></label>
-        <label>Rollout stages (%) <input id="rolloutStages" type="text" value="${state.rotationStages}"></label>
+        <label>Canary percent <input id="canaryPercent" type="number" min="1" max="20" step="1" value="${escapeHTML(state.rotationCanaryPercent)}"></label>
+        <label>Monitoring hours <input id="monitorHours" type="number" min="1" max="72" step="1" value="${escapeHTML(state.rotationMonitorHours)}"></label>
+        <label>Rollout stages (%) <input id="rolloutStages" type="text" value="${escapeHTML(state.rotationStages)}"></label>
         <label>Failure injection
           <select id="failureStep">
             ${FAILURE_STEPS.map(
@@ -1429,12 +1457,12 @@ function bindEvents(): void {
 
       const canary = Number(state.rotationCanaryPercent.trim());
       const monitoringHours = Number(state.rotationMonitorHours.trim());
-      const stageValues = normalizeRolloutStages(state.rotationStages);
+      const stageValues = parseRolloutStages(state.rotationStages);
       const failureStep = state.rotationFailureStep;
 
-      const safeCanary = Number.isFinite(canary) ? Math.round(canary) : 10;
-      const safeMonitoring = Number.isFinite(monitoringHours) ? Math.round(monitoringHours) : 24;
-      if (safeCanary < 1 || safeCanary > 20) {
+      const safeCanary = canary;
+      const safeMonitoring = monitoringHours;
+      if (!Number.isInteger(safeCanary) || safeCanary < 1 || safeCanary > 20) {
         state.uiMessage = 'Canary percent must be between 1 and 20.';
         state.uiMessageTone = 'error';
         runButton.disabled = false;
@@ -1442,7 +1470,7 @@ function bindEvents(): void {
         renderDashboard();
         return;
       }
-      if (safeMonitoring < 1 || safeMonitoring > 72) {
+      if (!Number.isInteger(safeMonitoring) || safeMonitoring < 1 || safeMonitoring > 72) {
         state.uiMessage = 'Monitoring hours must be between 1 and 72.';
         state.uiMessageTone = 'error';
         runButton.disabled = false;
@@ -1450,8 +1478,16 @@ function bindEvents(): void {
         renderDashboard();
         return;
       }
-      if (stageValues.length === 0) {
+      if (stageValues === null) {
         state.uiMessage = 'Rollout stages must include values between 1 and 100, for example: 10,50,100.';
+        state.uiMessageTone = 'error';
+        runButton.disabled = false;
+        runButton.textContent = 'Run Rotation';
+        renderDashboard();
+        return;
+      }
+      if (stageValues[stageValues.length - 1] !== 100) {
+        state.uiMessage = 'Rollout stages must end at 100 before classical-only certificates can be retired.';
         state.uiMessageTone = 'error';
         runButton.disabled = false;
         runButton.textContent = 'Run Rotation';
