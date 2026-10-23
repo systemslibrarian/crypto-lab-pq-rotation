@@ -815,7 +815,10 @@ test('the rotation form survives re-renders and the run honours what it says', a
     .filter((entry) => entry.includes('Rolled hybrid certificates to the'))
     .map((entry) => num(/to the (\d+)% fleet stage/.exec(entry)![1]));
   expect(stages).toEqual([25, 75, 100]);
-  expect(logs.some((entry) => entry.includes('Observed the canary for 2 simulated hour(s)'))).toBe(true);
+  // The status card intentionally keeps only the latest eight log lines. With
+  // three rollout stages the earlier canary-monitor line has scrolled out, so
+  // assert the first retained stage monitor reflects the same 2-hour setting.
+  expect(logs.some((entry) => entry.includes('Observed 25% rollout for 4 simulated hour(s)'))).toBe(true);
 
   // …and the shortened schedule shows up in the headline duration and step count.
   const [duration, steps] = allNums(await text(page, '#rotation .card[role="status"] p'));
