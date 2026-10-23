@@ -39,19 +39,37 @@ const devSandbox: CryptoInventoryItem = {
 };
 
 const today = new Date(Date.UTC(2026, 0, 1));
+const tlsConfidentiality: CryptoInventoryItem = {
+  ...rootCa,
+  id: 'tls-1',
+  systemName: 'Citizen TLS',
+  type: 'tls_endpoint',
+  currentAlgorithm: 'ECDSA-P256',
+  confidentialityAlgorithm: 'X25519',
+  dataSensitivityYears: 15,
+};
 
 describe("Mosca's inequality (X + Y > Z)", () => {
-  it('flags long-lived quantum-vulnerable data as exposed', () => {
-    const result = evaluateMosca(rootCa, 2033, 5, today);
-    // X=100, Y=5, Z=7 -> margin 98 > 0 -> exposed.
+  it('flags explicit long-lived classical key establishment past the planning line', () => {
+    const result = evaluateMosca(tlsConfidentiality, 2033, 5, today);
+    // X=15, Y=5, Z=7 -> margin 13 > 0.
     expect(result.vulnerable).toBe(true);
     expect(result.yearsToCrqc).toBe(7);
-    expect(result.marginYears).toBe(98);
+    expect(result.marginYears).toBe(13);
     expect(result.exposed).toBe(true);
   });
 
+  it('does not call signature-only root CA or firmware signing a harvest-now exposure', () => {
+    for (const type of ['pki_root_ca', 'firmware_signing'] as const) {
+      const result = evaluateMosca({ ...rootCa, type }, 2033, 5, today);
+      expect(result.vulnerable).toBe(false);
+      expect(result.exposed).toBe(false);
+      expect(result.marginYears).toBeGreaterThan(0); // arithmetic alone is insufficient
+    }
+  });
+
   it('does not flag short-lived data when CRQC is far off', () => {
-    const shortLived: CryptoInventoryItem = { ...rootCa, dataSensitivityYears: 1 };
+    const shortLived: CryptoInventoryItem = { ...tlsConfidentiality, dataSensitivityYears: 1 };
     // X=1, Y=1, Z=14 -> margin -12 -> safe buffer.
     const result = evaluateMosca(shortLived, 2040, 1, today);
     expect(result.exposed).toBe(false);
@@ -77,11 +95,19 @@ describe('priority scoring', () => {
 });
 
 describe('HNDL risk', () => {
-  it('marks a long-retention root CA as critical', () => {
+  it('keeps long-lived signing-only root CA out of HNDL while retaining migration priority', () => {
     const risk = computeHNDLRisk(rootCa, 2033, today);
+    expect(risk.atRisk).toBe(false);
+    expect(risk.riskLevel).toBe('low');
+    expect(risk.explanation).toContain('inventory confidentiality separately');
+    expect(computePriorityScore(rootCa)).toBeGreaterThan(computePriorityScore(devSandbox));
+  });
+
+  it('attributes HNDL risk to the explicit key-establishment algorithm, not the ECDSA signer', () => {
+    const risk = computeHNDLRisk(tlsConfidentiality, 2033, today);
     expect(risk.atRisk).toBe(true);
-    expect(risk.riskLevel).toBe('critical');
-    expect(risk.yearsOfExposure).toBeGreaterThan(0);
+    expect(risk.riskLevel).toBe('high');
+    expect(risk.explanation).toContain('X25519 for confidentiality');
   });
 
   it('does not flag symmetric crypto', () => {

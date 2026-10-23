@@ -177,9 +177,9 @@ test('the inventory tiles are exactly the table and the verdict they summarise',
   // "Catalogued Endpoints" is the Count column added up, not a separate figure.
   expect(num(tiles[0].replace('Catalogued Endpoints', ''))).toBe(tableTotal);
 
-  // "Quantum-Vulnerable Systems n/m": n <= m, and m is the catalogued item count
+  // "Classical confidentiality paths n/m": n <= m, and m is the catalogued item count
   // the timeline section independently states.
-  const [vulnerable, catalogued] = allNums(tiles[1].replace('Quantum-Vulnerable Systems', ''));
+  const [vulnerable, catalogued] = allNums(tiles[1].replace('Classical confidentiality paths', ''));
   expect(vulnerable).toBeLessThanOrEqual(catalogued);
   expect(catalogued).toBe(num(/of the (\d+) catalogued systems/.exec(await text(page, '#timeline .planner-count'))![1]));
 
@@ -187,11 +187,11 @@ test('the inventory tiles are exactly the table and the verdict they summarise',
   // score = round(exposed / catalogued * 100), and the band is that score's band.
   const verdict = await text(page, '.mosca-verdict');
   const [exposed, verdictVulnerable] = allNums(verdict);
-  expect(verdict).toContain('already past the line');
+  expect(verdict).toContain('past the planning line');
   expect(verdictVulnerable).toBe(vulnerable);
   expect(exposed).toBeLessThanOrEqual(vulnerable);
 
-  const scoreTile = tiles[2].replace('HNDL Score (already exposed)', '');
+  const scoreTile = tiles[2].replace('HNDL planning score', '');
   const score = num(scoreTile);
   expect(score).toBe(Math.round((exposed / catalogued) * 100));
   expect(scoreTile).toContain(score >= 60 ? 'HIGH' : score >= 30 ? 'ELEVATED' : 'MODERATE');
@@ -224,7 +224,7 @@ test("the worked example is Mosca's inequality evaluated at the slider settings"
   // And the conclusion is the sign of (X + Y) - Z, with the magnitude stated.
   const margin = sum - z;
   if (margin > 0) {
-    expect(example).toContain(`Exposed by ${margin} year(s)`);
+    expect(example).toContain(`Past the planning threshold by ${margin} year(s)`);
   } else {
     expect(example).toContain(`Buffer of ${Math.abs(margin)} year(s)`);
   }
@@ -270,11 +270,11 @@ test('moving the CRQC slider re-derives every dependent number, leaving none sta
   expect(z).toBe(2045 - new Date().getUTCFullYear());
 
   const afterVerdict = await text(page, '.mosca-verdict');
-  const [afterExposed, vulnerable] = allNums(afterVerdict);
+  const [afterExposed] = allNums(afterVerdict);
   // A later CRQC cannot expose MORE systems — the verdict is not a random number.
   expect(afterExposed).toBeLessThan(beforeExposed);
   expect(num(await text(page, '#inventory .metrics div:nth-child(3)'))).toBe(
-    Math.round((afterExposed / vulnerable) * 100),
+    Math.round((afterExposed / allNums(await text(page, '#inventory .metrics div:nth-child(2)'))[1]) * 100),
   );
 
   // No stale CRQC year survives in the HNDL explanations, and every row is

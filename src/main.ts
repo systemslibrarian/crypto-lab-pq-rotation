@@ -97,6 +97,7 @@ const DEMOS: InventoryDemo[] = [
         systemName: 'Public Web TLS',
         type: 'tls_endpoint',
         currentAlgorithm: 'ECDSA-P256',
+        confidentialityAlgorithm: 'X25519',
         dataSensitivityYears: 8,
         cryptoAgility: 'requires_redeploy',
         vendorPQRoadmap: 'committed',
@@ -107,6 +108,7 @@ const DEMOS: InventoryDemo[] = [
         systemName: 'Remote Access VPN',
         type: 'vpn',
         currentAlgorithm: 'RSA-2048',
+        confidentialityAlgorithm: 'ECDH-P256',
         dataSensitivityYears: 5,
         cryptoAgility: 'requires_redeploy',
         vendorPQRoadmap: 'in_progress',
@@ -189,6 +191,7 @@ const DEMOS: InventoryDemo[] = [
         systemName: 'Classified Traffic TLS',
         type: 'tls_endpoint',
         currentAlgorithm: 'ECDSA-P256',
+        confidentialityAlgorithm: 'X25519',
         dataSensitivityYears: 30,
         cryptoAgility: 'requires_redeploy',
         vendorPQRoadmap: 'committed',
@@ -199,6 +202,7 @@ const DEMOS: InventoryDemo[] = [
         systemName: 'Mission VPN',
         type: 'vpn',
         currentAlgorithm: 'RSA-2048',
+        confidentialityAlgorithm: 'ECDH-P256',
         dataSensitivityYears: 5,
         cryptoAgility: 'requires_redeploy',
         vendorPQRoadmap: 'in_progress',
@@ -273,6 +277,7 @@ const DEMOS: InventoryDemo[] = [
         systemName: 'Core Banking TLS',
         type: 'tls_endpoint',
         currentAlgorithm: 'ECDSA-P256',
+        confidentialityAlgorithm: 'X25519',
         dataSensitivityYears: 25,
         cryptoAgility: 'requires_redeploy',
         vendorPQRoadmap: 'committed',
@@ -293,6 +298,7 @@ const DEMOS: InventoryDemo[] = [
         systemName: 'Executive S/MIME',
         type: 'email_smime',
         currentAlgorithm: 'RSA-2048',
+        confidentialityAlgorithm: 'RSA-OAEP',
         dataSensitivityYears: 7,
         cryptoAgility: 'requires_redeploy',
         vendorPQRoadmap: 'unknown',
@@ -505,19 +511,20 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
   const highRisk = riskRows.filter((entry) => entry.risk.atRisk && (entry.risk.riskLevel === 'critical' || entry.risk.riskLevel === 'high'));
 
   // Mosca's inequality, evaluated per system at the user's chosen CRQC year and
-  // migration time. The HNDL score is now an honest count — the share of
-  // catalogued systems whose data is already past the harvest-now line — not a
-  // cosmetic number.
+  // migration time. Only explicitly inventoried confidentiality paths can
+  // cross this planning threshold; signing-only systems remain migration work.
   const moscas = demo.items.map((item) => evaluateMosca(item, state.crqcYear, state.migrationYears));
   const vulnerable = moscas.filter((m) => m.vulnerable);
   const exposed = moscas.filter((m) => m.exposed);
   const score = Math.round((exposed.length / Math.max(1, demo.items.length)) * 100);
   const scoreLabel = score >= 60 ? 'HIGH' : score >= 30 ? 'ELEVATED' : 'MODERATE';
 
-  // Worked example: the system with the worst (largest) Mosca margin.
-  const worstIndex = moscas.reduce((best, m, i) => (m.marginYears > moscas[best].marginYears ? i : best), 0);
+  // Worked example: the highest margin among vulnerable confidentiality paths.
+  const worstIndex = moscas.reduce((best, m, i) => (m.vulnerable && (!moscas[best]?.vulnerable || m.marginYears > moscas[best].marginYears) ? i : best), -1);
   const worst = moscas[worstIndex];
   const worstItem = demo.items[worstIndex];
+  const signingOnly = demo.items.filter((item) => !item.confidentialityAlgorithm &&
+    ['pki_root_ca', 'pki_intermediate_ca', 'pki_issuing_ca', 'firmware_signing', 'code_signing', 'jwt', 'iot_attestation', 'ssh'].includes(item.type));
   const z = Math.max(0, state.crqcYear - new Date().getUTCFullYear());
 
   return `
@@ -534,9 +541,9 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
       <div class="card table-wrap" role="region" tabindex="0" aria-label="Inventory summary table">
         <h3>Demo inventory: ${demo.name}</h3>
         <table>
-          <caption class="sr-only">Cryptographic inventory counts, algorithms, and sensitivity ranges</caption>
+          <caption class="sr-only">Cryptographic inventory counts, listed algorithms, and sensitivity ranges</caption>
           <thead>
-            <tr><th scope="col">Type</th><th scope="col">Algorithm</th><th scope="col">Count</th><th scope="col">Sensitivity</th></tr>
+            <tr><th scope="col">Type</th><th scope="col">Listed algorithm</th><th scope="col">Count</th><th scope="col">Sensitivity</th></tr>
           </thead>
           <tbody>
             ${demo.rows
@@ -546,13 +553,14 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
         </table>
         <div class="metrics">
           <div><span>Catalogued Endpoints</span><strong>${numberFmt(total)}</strong></div>
-          <div><span>Quantum-Vulnerable Systems</span><strong>${vulnerable.length}/${demo.items.length}</strong></div>
-          <div><span>HNDL Score (already exposed)</span><strong>${score}/100 (${scoreLabel})</strong></div>
+          <div><span>Classical confidentiality paths</span><strong>${vulnerable.length}/${demo.items.length}</strong></div>
+          <div><span>HNDL planning score</span><strong>${score}/100 (${scoreLabel})</strong></div>
         </div>
+        <p class="gloss">The table lists one algorithm per category. The scenario separately assumes X25519 key exchange for TLS, ECDH-P256 for VPN and RSA encryption for S/MIME; a listed signature algorithm alone never establishes HNDL exposure. The score is the share of the modeled inventory over a planning threshold, not measured interception or decryption.</p>
       </div>
       <div class="card mosca">
         <h3>Mosca's Inequality: are you already late?</h3>
-        <p class="formula"><strong>X + Y &gt; Z</strong> &rarr; data harvested today is still secret when quantum breaks it.</p>
+        <p class="formula"><strong>X + Y &gt; Z</strong> &rarr; the confidentiality migration planning threshold has been crossed.</p>
         <ul class="mosca-legend">
           <li><strong>X</strong> — how long the data must stay confidential (shelf life)</li>
           <li><strong>Y</strong> — how long migrating the system takes</li>
@@ -567,20 +575,21 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
           </label>
         </div>
         <p class="mosca-verdict ${exposed.length > 0 ? 'bad' : 'good'}" role="status">
-          ${exposed.length} of ${vulnerable.length} quantum-vulnerable systems are already past the line at these assumptions.
+          ${exposed.length} of ${vulnerable.length} classical confidentiality paths are past the planning line at these assumptions.
         </p>
         <p class="mosca-example">
-          Worst case — <strong>${worstItem.systemName}</strong>:
+          ${worst ? `Worst confidentiality case — <strong>${worstItem.systemName}</strong>:
           X=${worst.shelfLifeYears} + Y=${worst.migrationYears} = ${worst.shelfLifeYears + worst.migrationYears}
           vs Z=${worst.yearsToCrqc}.
           ${worst.marginYears > 0
-            ? `Exposed by <strong>${worst.marginYears} year(s)</strong> — start migrating now.`
-            : `Buffer of <strong>${Math.abs(worst.marginYears)} year(s)</strong> — but the margin shrinks as CRQC estimates move in.`}
+            ? `Past the planning threshold by <strong>${worst.marginYears} year(s)</strong> — start migrating now.`
+            : `Buffer of <strong>${Math.abs(worst.marginYears)} year(s)</strong> — but the margin shrinks as CRQC estimates move in.`}` : 'No classical key-establishment or public-key encryption path has been inventoried; assess confidentiality separately.'}
         </p>
+        <p class="gloss">Signature and authentication migrations still matter${signingOnly.length ? ` (for example ${signingOnly.slice(0, 3).map((item) => item.systemName).join(', ')})` : ''}: vulnerable keys could enable future forgery or impersonation once a CRQC exists, and long-lived verifiers may be hard to replace. That is distinct from decrypting traffic recorded today. <a href="https://csrc.nist.gov/pubs/ir/8547/ipd" target="_blank" rel="noopener noreferrer">NIST IR 8547, initial public draft (12 November 2024), §§3.1.1–3.1.3</a> separates these timelines.</p>
       </div>
       <div class="alert">
         <h3>Highest-Risk Systems (HNDL)</h3>
-        <p class="gloss"><strong>HNDL = harvest now, decrypt later</strong>: an attacker records your encrypted traffic today and simply stores it, then decrypts it once a quantum computer arrives. Anything whose secrecy must outlast that arrival is already at risk — which is exactly what Mosca’s inequality above measures.</p>
+        <p class="gloss"><strong>HNDL = harvest now, decrypt later</strong>: an attacker stores encrypted traffic now for possible future decryption after a CRQC. This applies here only to the explicitly modeled classical key exchange or public-key encryption protecting that traffic; the CRQC year and migration durations are assumptions.</p>
         <ul>
           ${highRisk.length === 0
             ? '<li>No critical/high HNDL systems at the current CRQC assumption.</li>'

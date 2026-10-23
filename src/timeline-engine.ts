@@ -22,6 +22,9 @@ export interface CryptoInventoryItem {
     | 'backup'
     | 'ssh';
   currentAlgorithm: string;
+  /** Explicit key-establishment or public-key encryption protecting stored/recorded ciphertext.
+   * A signature or authentication algorithm alone does not establish HNDL exposure. */
+  confidentialityAlgorithm?: string;
   dataSensitivityYears: number;
   cryptoAgility: 'native' | 'requires_redeploy' | 'requires_replacement';
   vendorPQRoadmap: 'committed' | 'in_progress' | 'unknown' | 'none';
@@ -379,20 +382,20 @@ export function setModelMilestone(profile: RegulatoryFramework, category: Regula
 }
 
 export interface MoscaEvaluation {
-  vulnerable: boolean;
+  vulnerable: boolean; // the inventoried confidentiality algorithm is quantum-vulnerable
   shelfLifeYears: number; // X — how long the data must stay confidential
   migrationYears: number; // Y — how long migrating this system takes
   yearsToCrqc: number; // Z — years until a cryptographically relevant quantum computer
-  exposed: boolean; // X + Y > Z  ->  harvest-now-decrypt-later already bites
+  exposed: boolean; // X + Y > Z -> migration planning threshold crossed for confidentiality
   marginYears: number; // (X + Y) - Z; positive means too late, negative means buffer
 }
 
 /**
  * Mosca's inequality. If the data's shelf life (X) plus the time to migrate (Y)
- * is greater than the time until a quantum computer can break today's
- * cryptography (Z), then data harvested today will still be sensitive when it
- * becomes decryptable. In that case the migration is already behind, regardless
- * of how far off "the quantum threat" feels.
+ * is greater than the time until a quantum computer can break the explicitly
+ * inventoried key establishment/encryption (Z), the confidentiality migration
+ * planning threshold has been crossed. This does not infer HNDL from a CA,
+ * firmware signing, or authentication key, even if that key uses RSA/ECDSA.
  */
 export function evaluateMosca(
   item: CryptoInventoryItem,
@@ -400,7 +403,8 @@ export function evaluateMosca(
   migrationYears: number,
   today: Date = new Date(),
 ): MoscaEvaluation {
-  const vulnerable = algorithmIsQuantumVulnerable(item.currentAlgorithm);
+  const vulnerable = item.confidentialityAlgorithm !== undefined
+    && algorithmIsQuantumVulnerable(item.confidentialityAlgorithm);
   const shelfLifeYears = item.dataSensitivityYears;
   const yearsToCrqc = Math.max(0, crqcArrivalYear - today.getUTCFullYear());
   const marginYears = shelfLifeYears + migrationYears - yearsToCrqc;
@@ -487,12 +491,20 @@ export function computeHNDLRisk(
   riskLevel: RiskLevel;
   explanation: string;
 } {
-  if (!algorithmIsQuantumVulnerable(item.currentAlgorithm)) {
+  if (!item.confidentialityAlgorithm) {
     return {
       atRisk: false,
       yearsOfExposure: 0,
       riskLevel: 'low',
-      explanation: `${item.systemName} currently relies on ${item.currentAlgorithm}, which is not the immediate asymmetric PQ migration driver here.`,
+      explanation: `${item.systemName} lists ${item.currentAlgorithm}, but no key-establishment or public-key encryption algorithm. Do not infer harvest-now exposure from a signing/authentication key; inventory confidentiality separately.`,
+    };
+  }
+  if (!algorithmIsQuantumVulnerable(item.confidentialityAlgorithm)) {
+    return {
+      atRisk: false,
+      yearsOfExposure: 0,
+      riskLevel: 'low',
+      explanation: `${item.systemName}'s inventoried confidentiality algorithm ${item.confidentialityAlgorithm} is not the immediate asymmetric HNDL migration driver here.`,
     };
   }
 
@@ -501,9 +513,9 @@ export function computeHNDLRisk(
   const atRisk = yearsOfExposure > 0;
 
   let riskLevel: RiskLevel = 'low';
-  if (item.type === 'pki_root_ca' || item.type === 'firmware_signing' || yearsOfExposure >= 15) {
+  if (yearsOfExposure >= 15) {
     riskLevel = 'critical';
-  } else if (yearsOfExposure >= 8 || item.environmentTag === 'production') {
+  } else if (yearsOfExposure >= 8 || (atRisk && item.environmentTag === 'production')) {
     riskLevel = 'high';
   } else if (yearsOfExposure >= 3) {
     riskLevel = 'medium';
@@ -514,8 +526,8 @@ export function computeHNDLRisk(
     yearsOfExposure,
     riskLevel,
     explanation: atRisk
-      ? `${item.systemName} uses ${item.currentAlgorithm} and its ${item.dataSensitivityYears}-year sensitivity window extends ${yearsOfExposure} year(s) past a ${crqcArrivalYear} CRQC scenario.`
-      : `${item.systemName} still uses ${item.currentAlgorithm}, but its confidentiality window closes before a ${crqcArrivalYear} CRQC estimate.`,
+      ? `${item.systemName} uses ${item.confidentialityAlgorithm} for confidentiality and its ${item.dataSensitivityYears}-year sensitivity window extends ${yearsOfExposure} year(s) past a ${crqcArrivalYear} CRQC scenario.`
+      : `${item.systemName} uses ${item.confidentialityAlgorithm} for confidentiality, but its confidentiality window closes before a ${crqcArrivalYear} CRQC estimate.`,
   };
 }
 
@@ -552,6 +564,7 @@ export async function runTimelineEngineChecks(): Promise<{
       systemName: 'Citizen Services TLS',
       type: 'tls_endpoint',
       currentAlgorithm: 'ECDSA-P256',
+      confidentialityAlgorithm: 'X25519',
       dataSensitivityYears: 15,
       cryptoAgility: 'requires_redeploy',
       vendorPQRoadmap: 'committed',
@@ -587,8 +600,9 @@ export async function runTimelineEngineChecks(): Promise<{
   const planCoversAllInventory = new Set(plan.map((action) => action.itemId)).size === inventory.length;
   const issuingActions = plan.filter((action) => action.itemId === 'issuing-1');
   const dependenciesRespected = issuingActions.every((action) => action.dependencies.includes('root-1'));
-  const hndl = computeHNDLRisk(inventory[0], 2033, utcDate(2026, 1, 1));
-  const hndlFlagsLongLivedData = hndl.atRisk && (hndl.riskLevel === 'critical' || hndl.riskLevel === 'high');
+  const rootSigning = computeHNDLRisk(inventory[0], 2033, utcDate(2026, 1, 1));
+  const hndl = computeHNDLRisk(inventory[2], 2033, utcDate(2026, 1, 1));
+  const hndlFlagsLongLivedData = !rootSigning.atRisk && hndl.atRisk && (hndl.riskLevel === 'critical' || hndl.riskLevel === 'high');
   const allFrameworksPresent = frameworkSet.every((framework) => framework.milestones.length >= 4);
 
   return {
