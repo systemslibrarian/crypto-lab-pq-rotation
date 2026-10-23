@@ -1,7 +1,7 @@
-import { setModelMilestone } from '../src/timeline-engine';
 import { describe, it, expect } from 'vitest';
 
 import {
+  algorithmIsQuantumVulnerable,
   evaluateMosca,
   computePriorityScore,
   computeHNDLRisk,
@@ -13,6 +13,7 @@ import {
   AUSTRALIA_ASD,
   GERMANY_BSI,
   CANADA_CCCS,
+  setModelMilestone,
   type CryptoInventoryItem,
 } from '../src/timeline-engine.ts';
 
@@ -63,6 +64,24 @@ describe("Mosca's inequality (X + Y > Z)", () => {
     expect(result.vulnerable).toBe(false);
     expect(result.exposed).toBe(false);
   });
+
+  it.each(['ML-DSA-65', 'SLH-DSA-SHA2-128s', 'ML-KEM-768', 'AES-256'])(
+    'does not mistake the post-quantum or symmetric family %s for a classical algorithm',
+    (algorithm) => {
+      expect(algorithmIsQuantumVulnerable(algorithm)).toBe(false);
+    },
+  );
+
+  it.each(['RSA-4096', 'ECDSA-P256', 'ECDH-P256', 'Ed25519', 'X25519', 'DSA-2048', 'DH-2048'])(
+    'recognises the classical family in %s',
+    (algorithm) => {
+      expect(algorithmIsQuantumVulnerable(algorithm)).toBe(true);
+    },
+  );
+
+  it('still recognises the classical half of a hybrid algorithm name', () => {
+    expect(algorithmIsQuantumVulnerable('ECDSA-P256 + ML-DSA-65')).toBe(true);
+  });
 });
 
 describe('priority scoring', () => {
@@ -87,6 +106,14 @@ describe('HNDL risk', () => {
   it('does not flag symmetric crypto', () => {
     const risk = computeHNDLRisk(devSandbox, 2033, today);
     expect(risk.atRisk).toBe(false);
+    expect(risk.riskLevel).toBe('low');
+  });
+
+  it('does not label a root CA critical when its confidentiality window ends before the CRQC estimate', () => {
+    const shortLivedRoot = { ...rootCa, dataSensitivityYears: 1 };
+    const risk = computeHNDLRisk(shortLivedRoot, 2045, today);
+    expect(risk.atRisk).toBe(false);
+    expect(risk.yearsOfExposure).toBe(0);
     expect(risk.riskLevel).toBe('low');
   });
 });

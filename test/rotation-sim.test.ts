@@ -59,6 +59,28 @@ describe('successful rotation', () => {
   });
 });
 
+describe('configuration validation', () => {
+  it('refuses to retire classical certificates before a 100% rollout stage', async () => {
+    await expect(
+      simulateRotation(sampleFleet(), { ...happyConfig, rolloutPercentages: [10, 50] }),
+    ).rejects.toThrow(/end at 100/);
+  });
+
+  it('refuses duplicate, descending, fractional, and out-of-range rollout stages', async () => {
+    for (const rolloutPercentages of [[10, 10, 100], [50, 10, 100], [10.5, 100], [10, 101, 100]]) {
+      await expect(
+        simulateRotation(sampleFleet(), { ...happyConfig, rolloutPercentages }),
+      ).rejects.toThrow(/strictly increasing order/);
+    }
+  });
+
+  it('refuses an empty fleet and non-integral control values', async () => {
+    await expect(simulateRotation([], happyConfig)).rejects.toThrow(/at least one server/);
+    await expect(simulateRotation(sampleFleet(), { ...happyConfig, canaryPercent: 1.5 })).rejects.toThrow(/Canary percent/);
+    await expect(simulateRotation(sampleFleet(), { ...happyConfig, monitoringHours: 1.5 })).rejects.toThrow(/Monitoring hours/);
+  });
+});
+
 describe('failure injection triggers rollback', () => {
   it('rolls the whole fleet back to classical_only on a rollout failure', async () => {
     const run = await simulateRotation(sampleFleet(), {

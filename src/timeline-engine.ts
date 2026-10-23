@@ -115,9 +115,18 @@ function midpoint(start: Date, end: Date, ratio: number): Date {
   return new Date(start.getTime() + (end.getTime() - start.getTime()) * clamped);
 }
 
-function algorithmIsQuantumVulnerable(algorithm: string): boolean {
-  const normalized = algorithm.toLowerCase();
-  return ['rsa', 'ecdsa', 'ecdh', 'ed25519', 'x25519', 'dsa', 'dh'].some((value) => normalized.includes(value));
+export function algorithmIsQuantumVulnerable(algorithm: string): boolean {
+  // Remove names of post-quantum families before looking for classical tokens.
+  // A substring search for "dsa" incorrectly classified ML-DSA and SLH-DSA as
+  // quantum-vulnerable, which then inflated both their priority and HNDL risk.
+  // Keeping the rest of a composite name means "ECDSA + ML-DSA" is still
+  // correctly treated as containing a vulnerable classical component.
+  const classicalCandidate = algorithm
+    .toLowerCase()
+    .replace(/\b(?:ml|slh)[-_\s]?dsa(?:[-_\s]?\d+)?\b/g, ' ')
+    .replace(/\bml[-_\s]?kem(?:[-_\s]?\d+)?\b/g, ' ');
+
+  return /\b(?:rsa|ecdsa|ecdh|ed25519|x25519|dsa|dh)\b/.test(classicalCandidate);
 }
 
 function milestoneFor(framework: RegulatoryFramework, category: RegulatoryFramework['milestones'][number]['category']): Date {
@@ -501,12 +510,14 @@ export function computeHNDLRisk(
   const atRisk = yearsOfExposure > 0;
 
   let riskLevel: RiskLevel = 'low';
-  if (item.type === 'pki_root_ca' || item.type === 'firmware_signing' || yearsOfExposure >= 15) {
-    riskLevel = 'critical';
-  } else if (yearsOfExposure >= 8 || item.environmentTag === 'production') {
-    riskLevel = 'high';
-  } else if (yearsOfExposure >= 3) {
-    riskLevel = 'medium';
+  if (atRisk) {
+    if (item.type === 'pki_root_ca' || item.type === 'firmware_signing' || yearsOfExposure >= 15) {
+      riskLevel = 'critical';
+    } else if (yearsOfExposure >= 8 || item.environmentTag === 'production') {
+      riskLevel = 'high';
+    } else if (yearsOfExposure >= 3) {
+      riskLevel = 'medium';
+    }
   }
 
   return {
