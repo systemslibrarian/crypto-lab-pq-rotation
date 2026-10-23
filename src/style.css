@@ -525,6 +525,11 @@ select {
   color: var(--canary);
 }
 
+.mosca .gloss a {
+  color: #d2ecff;
+  text-underline-offset: 0.14em;
+}
+
 .mosca-legend {
   margin: 0 0 12px;
   padding-left: 18px;
