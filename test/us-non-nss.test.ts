@@ -15,7 +15,7 @@ describe('scoped US federal non-NSS policy', () => {
  it('calculates the relative plan date and preserves source status distinctions', () => {
   expect(planSubmissionDate()).toBe('2026-10-22');
   expect(US_FEDERAL_SOURCES.eoStatus).toBe('issued-executive-order');
-  expect(US_FEDERAL_SOURCES.ir8547Status).toBe('initial-public-draft');
+  expect(US_FEDERAL_SOURCES.ir8547Status).toBe('final-report');
   expect(US_FEDERAL_SOURCES.farStatus).toBe('direction-to-publish-proposed-rules');
  });
 });

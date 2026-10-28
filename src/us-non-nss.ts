@@ -5,7 +5,7 @@ export const US_FEDERAL_SOURCES = Object.freeze({
   eo: 'https://www.whitehouse.gov/presidential-actions/2026/06/securing-the-nation-against-advanced-cryptographic-attacks/',
   omb: 'https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf',
   eoStatus: 'issued-executive-order', memorandumStatus: 'issued-memorandum',
-  farStatus: 'direction-to-publish-proposed-rules', ir8547Status: 'initial-public-draft',
+  farStatus: 'direction-to-publish-proposed-rules', ir8547Status: 'final-report',
 });
 export function planSubmissionDate(): string {
   const date = new Date('2026-06-24T00:00:00Z');
@@ -38,8 +38,8 @@ export function renderUSFederalProfile(): string {
     <p id="us-federal-target" role="status">${target.deadline ? `Source target: ${target.deadline}. ` : 'No deadline assigned by this scope check. '}${target.note}</p>
     <p><a href="${US_FEDERAL_SOURCES.eo}" target="_blank" rel="noopener noreferrer">EO 14412, issued 22 June 2026, §4(b)</a>: prioritized non-NSS key establishment by 31 December 2030; digital signatures by 31 December 2031.</p>
     <p><a href="${US_FEDERAL_SOURCES.omb}" target="_blank" rel="noopener noreferrer">OMB M-26-15, issued 24 June 2026, §§3B/3D</a>: agency plans within <strong>120 days from the memorandum</strong>. Calendar-day calculation: 24 June + 120 days = <strong>${planSubmissionDate()}</strong>. Phases run through 2035. Priorities include HVAs, high-impact and other specified highly sensitive/vulnerable systems; NSS is excluded.</p>
-    <p><a href="https://csrc.nist.gov/pubs/ir/8547/ipd" target="_blank" rel="noopener noreferrer">NIST IR 8547 remains an initial public draft (12 November 2024)</a>.
-    <a href="https://csrc.nist.gov/pubs/cswp/39/upd1/considerations-for-achieving-crypto-agility/final" target="_blank" rel="noopener noreferrer">CSWP 39upd1 is a final crypto-agility white paper (updated 29 June 2026)</a>. These have different status from the issued EO/memorandum. Descriptive policy education; no compliance determination. Reviewed 12 October 2026.</p>
+    <p><a href="https://csrc.nist.gov/pubs/ir/8547/final" target="_blank" rel="noopener noreferrer">NIST IR 8547 is a final report (27 October 2026)</a>. Its §4 schedule deprecates quantum-vulnerable public-key algorithms after 2030 and disallows them under NIST standards and guidelines after 2035. It preserves the earlier migration targets for prioritized federal systems above; it does not establish a universal private-sector deadline.
+    <a href="https://csrc.nist.gov/pubs/cswp/39/upd1/considerations-for-achieving-crypto-agility/final" target="_blank" rel="noopener noreferrer">CSWP 39upd1 is a final crypto-agility white paper (updated 29 June 2026)</a>. These final guidance publications are distinct from the issued EO/memorandum. Descriptive policy education; no compliance determination. IR 8547 status reviewed 28 October 2026.</p>
   </section>`;
 }
 export function bindUSFederalProfile(): void {

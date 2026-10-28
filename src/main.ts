@@ -585,7 +585,7 @@ function renderInventoryExhibit(demo: InventoryDemo, riskRows: Array<{ item: Cry
             ? `Past the planning threshold by <strong>${worst.marginYears} year(s)</strong> — start migrating now.`
             : `Buffer of <strong>${Math.abs(worst.marginYears)} year(s)</strong> — but the margin shrinks as CRQC estimates move in.`}` : 'No classical key-establishment or public-key encryption path has been inventoried; assess confidentiality separately.'}
         </p>
-        <p class="gloss">Signature and authentication migrations still matter${signingOnly.length ? ` (for example ${signingOnly.slice(0, 3).map((item) => item.systemName).join(', ')})` : ''}: vulnerable keys could enable future forgery or impersonation once a CRQC exists, and long-lived verifiers may be hard to replace. That is distinct from decrypting traffic recorded today. <a href="https://csrc.nist.gov/pubs/ir/8547/ipd" target="_blank" rel="noopener noreferrer">NIST IR 8547, initial public draft (12 November 2024), §§3.1.1–3.1.3</a> separates these timelines.</p>
+        <p class="gloss">Signature and authentication migrations still matter${signingOnly.length ? ` (for example ${signingOnly.slice(0, 3).map((item) => item.systemName).join(', ')})` : ''}: vulnerable keys could enable future forgery or impersonation once a CRQC exists, and long-lived verifiers may be hard to replace. That is distinct from decrypting traffic recorded today. <a href="https://csrc.nist.gov/pubs/ir/8547/final" target="_blank" rel="noopener noreferrer">NIST IR 8547, final report (27 October 2026), §§3.1.1–3.1.3</a> separates these timelines.</p>
       </div>
       <div class="alert">
         <h3>Highest-Risk Systems (HNDL)</h3>
