@@ -922,3 +922,33 @@ test('Canada model-date edits update planning while published milestones and sco
   expect(await page.locator('.official-milestones').textContent()).toBe(official);
   await expectDoomMatchesMilestones(page);
 });
+
+test('a rotation input cannot break out of the attribute it is rendered into', async ({ page }) => {
+  // The dashboard re-renders with `root.innerHTML` and writes these inputs'
+  // values back into `value="..."` attributes — CodeQL js/xss-through-dom at
+  // src/main.ts:1251, whose codeFlow runs #canaryPercent's `.value` through
+  // `state.rotationCanaryPercent` into that template.
+  //
+  // Typing alone does NOT re-render: `bindControl` only updates state, so focus
+  // survives a keystroke. The payload therefore has to be typed and THEN a
+  // re-rendering action taken, or this test never reaches the sink at all —
+  // measured, after a first version that asserted against an attribute still
+  // holding its default value.
+  await page.evaluate(() => {
+    (window as unknown as { __rotationXss?: boolean }).__rotationXss = false;
+  });
+  const payload = '"><img src=x data-injected=yes onerror="window.__rotationXss=true">';
+
+  // #rolloutStages is the text input, so the browser's own value sanitization
+  // does not alter the payload before the render path sees it.
+  await page.locator('#rolloutStages').fill(payload);
+  await page.locator('button[data-action="run-rotation"]').click();
+
+  // The attribute really was re-emitted from state, so the assertions below are
+  // about the sink rather than about a stale default.
+  await expect(page.locator('#rolloutStages')).toHaveValue(payload);
+  expect(await page.locator('#rolloutStages').evaluate((n) => n.outerHTML)).toContain('&quot;&gt;&lt;img');
+
+  await expect(page.locator('[data-injected]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __rotationXss?: boolean }).__rotationXss)).toBe(false);
+});
