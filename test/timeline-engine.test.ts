@@ -1,7 +1,7 @@
-import { setModelMilestone } from '../src/timeline-engine';
 import { describe, it, expect } from 'vitest';
 
 import {
+  algorithmIsQuantumVulnerable,
   evaluateMosca,
   computePriorityScore,
   computeHNDLRisk,
@@ -13,6 +13,7 @@ import {
   AUSTRALIA_ASD,
   GERMANY_BSI,
   CANADA_CCCS,
+  setModelMilestone,
   type CryptoInventoryItem,
 } from '../src/timeline-engine.ts';
 
@@ -81,6 +82,24 @@ describe("Mosca's inequality (X + Y > Z)", () => {
     expect(result.vulnerable).toBe(false);
     expect(result.exposed).toBe(false);
   });
+
+  it.each(['ML-DSA-65', 'SLH-DSA-SHA2-128s', 'ML-KEM-768', 'AES-256'])(
+    'does not mistake the post-quantum or symmetric family %s for a classical algorithm',
+    (algorithm) => {
+      expect(algorithmIsQuantumVulnerable(algorithm)).toBe(false);
+    },
+  );
+
+  it.each(['RSA-4096', 'ECDSA-P256', 'ECDH-P256', 'Ed25519', 'X25519', 'DSA-2048', 'DH-2048'])(
+    'recognises the classical family in %s',
+    (algorithm) => {
+      expect(algorithmIsQuantumVulnerable(algorithm)).toBe(true);
+    },
+  );
+
+  it('still recognises the classical half of a hybrid algorithm name', () => {
+    expect(algorithmIsQuantumVulnerable('ECDSA-P256 + ML-DSA-65')).toBe(true);
+  });
 });
 
 describe('priority scoring', () => {
@@ -113,6 +132,14 @@ describe('HNDL risk', () => {
   it('does not flag symmetric crypto', () => {
     const risk = computeHNDLRisk(devSandbox, 2033, today);
     expect(risk.atRisk).toBe(false);
+    expect(risk.riskLevel).toBe('low');
+  });
+
+  it('does not label a root CA critical when its confidentiality window ends before the CRQC estimate', () => {
+    const shortLivedRoot = { ...rootCa, dataSensitivityYears: 1 };
+    const risk = computeHNDLRisk(shortLivedRoot, 2045, today);
+    expect(risk.atRisk).toBe(false);
+    expect(risk.yearsOfExposure).toBe(0);
     expect(risk.riskLevel).toBe('low');
   });
 });
@@ -202,5 +229,66 @@ describe('source provenance is separate from planner assumptions', () => {
     } finally { setModelMilestone(CANADA_CCCS, 'pilot', original); }
     expect(CANADA_CCCS.scope).toContain('non-classified');
     expect(CNSA_2_0.scope).toContain('National Security Systems');
+  });
+});
+
+/**
+ * The rebase onto main hit a real semantic conflict here, and these pin the
+ * resolution. main classified by exposure years with `atRisk` appearing only in
+ * one clause; this branch gated the whole chain on `atRisk` and escalated two
+ * asset types to critical.
+ *
+ * Gating on `atRisk` is behaviour-preserving, because `atRisk = yearsOfExposure
+ * > 0` makes every exposure clause imply it — so the only substantive change is
+ * the escalation, and it was shipping with no test. These are that test.
+ */
+describe('HNDL risk escalation for the assets that cannot be re-issued cheaply', () => {
+  // Three years of exposure: enough to be at risk, far short of the 15 that
+  // make anything critical on exposure alone.
+  const shortExposure = { dataSensitivityYears: 10, environmentTag: 'test' as const };
+
+  it('is at risk but only medium for an ordinary asset at this exposure', () => {
+    const risk = computeHNDLRisk(
+      { ...tlsConfidentiality, ...shortExposure, type: 'tls_endpoint' },
+      2033,
+      today,
+    );
+    expect(risk.atRisk).toBe(true);
+    expect(risk.yearsOfExposure).toBe(3);
+    expect(risk.riskLevel).toBe('medium');
+  });
+
+  it('escalates a PKI root CA to critical at the same exposure', () => {
+    const risk = computeHNDLRisk(
+      { ...tlsConfidentiality, ...shortExposure, type: 'pki_root_ca' },
+      2033,
+      today,
+    );
+    expect(risk.yearsOfExposure).toBe(3);
+    expect(risk.riskLevel).toBe('critical');
+  });
+
+  it('escalates a firmware signing key to critical at the same exposure', () => {
+    const risk = computeHNDLRisk(
+      { ...tlsConfidentiality, ...shortExposure, type: 'firmware_signing' },
+      2033,
+      today,
+    );
+    expect(risk.yearsOfExposure).toBe(3);
+    expect(risk.riskLevel).toBe('critical');
+  });
+
+  it('does not escalate either type when the confidentiality window closes first', () => {
+    // The gate: no exposure means no risk level at all, whatever the asset is.
+    for (const type of ['pki_root_ca', 'firmware_signing'] as const) {
+      const risk = computeHNDLRisk(
+        { ...tlsConfidentiality, type, dataSensitivityYears: 1, environmentTag: 'production' },
+        2033,
+        today,
+      );
+      expect(risk.atRisk, type).toBe(false);
+      expect(risk.yearsOfExposure, type).toBe(0);
+      expect(risk.riskLevel, type).toBe('low');
+    }
   });
 });

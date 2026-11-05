@@ -22,7 +22,7 @@ export interface RotationStep {
   notes: string;
 }
 
-interface RotationConfig {
+export interface RotationConfig {
   canaryPercent: number;
   monitoringHours: number;
   rolloutPercentages: number[];
@@ -31,6 +31,32 @@ interface RotationConfig {
     atStep?: string;
     severity?: 'minor' | 'major' | 'critical';
   };
+}
+
+function validateRotationConfig(servers: ServerState[], config: RotationConfig): void {
+  if (servers.length === 0) {
+    throw new Error('Rotation requires at least one server.');
+  }
+  if (!Number.isInteger(config.canaryPercent) || config.canaryPercent < 1 || config.canaryPercent > 20) {
+    throw new Error('Canary percent must be an integer between 1 and 20.');
+  }
+  if (!Number.isInteger(config.monitoringHours) || config.monitoringHours < 1 || config.monitoringHours > 72) {
+    throw new Error('Monitoring hours must be an integer between 1 and 72.');
+  }
+  if (config.rolloutPercentages.length === 0) {
+    throw new Error('Rollout stages must not be empty.');
+  }
+
+  let previous = 0;
+  for (const percent of config.rolloutPercentages) {
+    if (!Number.isInteger(percent) || percent < 1 || percent > 100 || percent <= previous) {
+      throw new Error('Rollout stages must be unique integers in strictly increasing order from 1 to 100.');
+    }
+    previous = percent;
+  }
+  if (previous !== 100) {
+    throw new Error('Rollout stages must end at 100 before classical-only certificates can be retired.');
+  }
 }
 
 function randomBytes(length: number): Uint8Array {
@@ -119,6 +145,8 @@ export async function simulateRotation(
   rolledBack: boolean;
   finalState: ServerState[];
 }> {
+  validateRotationConfig(servers, config);
+
   const workingSet = cloneServers(servers);
   const originalSet = cloneServers(servers);
   const baseTime = new Date();
