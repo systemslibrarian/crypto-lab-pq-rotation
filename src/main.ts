@@ -895,7 +895,8 @@ function renderCertificateExhibit(): string {
   const introduction = `
       <div class="panel-head">
         <h2 id="certs-title">Steps 2 &amp; 3 — The fix and its cost (Hybrid certificate)</h2>
-        <p>A real X.509-style leaf certificate dual-signed with classical ECDSA-P256 and PQ ML-DSA-65, per the <em>composite-signature</em> drafts. Every byte size below is measured from the actual keys and signatures generated in your browser.</p>
+        <p>A composite-style certificate teaching model signed with real ECDSA-P256 and ML-DSA-65 keys. Key and signature sizes are measured in your browser; the X.509 envelope size is modeled.</p>
+        <p class="small-note" id="composite-standards-status"><strong>Standards reviewed 10 November 2026:</strong> <a href="https://www.rfc-editor.org/info/rfc10073/">RFC 10073</a> (November 2026, Proposed Standard) now specifies Composite ML-DSA for X.509. This demo signs a JSON body and models the X.509 envelope; it does not implement DER certificates, the RFC wire format, or CMS, and does not claim RFC conformance.</p>
         <p class="gloss"><strong>Composite signature</strong> = one certificate carrying two independent signatures (a classical one and a post-quantum one) that must <em>both</em> verify, treated as one atomic algorithm with its own OID. It hedges algorithm risk — the certificate stays trustworthy if either algorithm is broken — but it is <em>not</em> backward compatible: a legacy verifier that only knows ECDSA does not recognise the composite OID and rejects the certificate, which is why migration has to be staged.</p>
       </div>`;
 

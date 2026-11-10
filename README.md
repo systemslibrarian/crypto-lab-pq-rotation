@@ -65,7 +65,7 @@ The migration framework represented here aligns with published guidance from:
 - Canada CCCS PQC roadmap (June 2025)
 - ETSI CYBER quantum-safe guidance
 
-Hybrid certificate modeling follows the composite-signature transition direction described in IETF LAMPS work (including draft-ietf-lamps-pq-composite-sigs).
+**Standards reviewed 10 November 2026:** [RFC 10073](https://www.rfc-editor.org/info/rfc10073/) (November 2026, Proposed Standard) now specifies Composite ML-DSA for X.509. This demo signs a JSON body and models the X.509 envelope; it does not implement DER certificates, the RFC wire format, or CMS, and does not claim RFC conformance. The visible certificate exhibit makes the same distinction.
 
 The implementation reflects real migration patterns used by large enterprises and public-sector organizations: inventory first, hybrid rollout, monitored phased rotation, rollback-safe operations, and eventual classical retirement under compliance timelines.
 
@@ -80,7 +80,7 @@ npm run dev
 
 ## Related Demos
 - [crypto-lab-harvest-timeline](https://systemslibrarian.github.io/crypto-lab-harvest-timeline/) — the Mosca inequality and cost-of-delay scenarios that justify migrating now.
-- [crypto-lab-hybrid-sign](https://systemslibrarian.github.io/crypto-lab-hybrid-sign/) — Ed25519 + ML-DSA-65 composite signatures, the IETF LAMPS construction this planner deploys.
+- [crypto-lab-hybrid-sign](https://systemslibrarian.github.io/crypto-lab-hybrid-sign/) — Ed25519 + ML-DSA-65 composite signatures, a separate older draft-16 construction demo; this planner deploys no certificates.
 - [crypto-lab-pki-chain](https://systemslibrarian.github.io/crypto-lab-pki-chain/) — X.509 certificate chains and the trust hierarchy being rotated.
 - [crypto-lab-pq-families](https://systemslibrarian.github.io/crypto-lab-pq-families/) — the five PQC families and the size tradeoffs that drive migration choices.
 - [crypto-lab-pq-tls-handshake](https://systemslibrarian.github.io/crypto-lab-pq-tls-handshake/) — hybrid X25519MLKEM768 key exchange, the TLS side of the same migration.

@@ -952,3 +952,15 @@ test('a rotation input cannot break out of the attribute it is rendered into', a
   await expect(page.locator('[data-injected]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __rotationXss?: boolean }).__rotationXss)).toBe(false);
 });
+
+test('certificate model distinguishes the published RFC from its JSON teaching format', async ({ page }) => {
+  await page.goto('.');
+  const note = page.locator('#composite-standards-status');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('RFC 10073');
+  await expect(note).toContainText('November 2026, Proposed Standard');
+  await expect(note).toContainText('signs a JSON body');
+  await expect(note).toContainText('does not implement DER certificates');
+  await expect(note).toContainText('does not claim RFC conformance');
+  await expect(note.locator('a[href="https://www.rfc-editor.org/info/rfc10073/"]')).toHaveCount(1);
+});
