@@ -60,12 +60,14 @@ The migration framework represented here aligns with published guidance from:
 - NIST NCCoE Migration to PQC project materials
 - EU NIS Cooperation Group PQC roadmap (June 2025)
 - UK NCSC post-quantum migration guidance (2025)
-- Germany BSI transition guidance (October 2024)
+- Germany BSI: joint European statement "Securing Tomorrow, Today: Transitioning to Post-Quantum Cryptography" (November 2024; edition hosted by BSI dated 27 June 2025)
 - Australia ASD Information Security Manual
 - Canada CCCS PQC roadmap (June 2025)
 - ETSI CYBER quantum-safe guidance
 
 **Standards reviewed 10 November 2026:** [RFC 10073](https://www.rfc-editor.org/info/rfc10073/) (November 2026, Proposed Standard) now specifies Composite ML-DSA for X.509. This demo signs a JSON body and models the X.509 envelope; it does not implement DER certificates, the RFC wire format, or CMS, and does not claim RFC conformance. The visible certificate exhibit makes the same distinction.
+
+**Standards reviewed 15 November 2026:** the [BSI's post-quantum cryptography page](https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Informationen-und-Empfehlungen/Quantentechnologien-und-Post-Quanten-Kryptografie/quantentechnologien-und-post-quanten-kryptografie_node.html) states that "Together with partners from 17 other European states, the BSI published a joint-statement on Post-Quantum Cryptography in November 2024", since signed by partners from three more states; the edition it hosts is dated 27 June 2025. An earlier edition of this README dated the BSI guidance October 2024, which matches no BSI publication; the Germany BSI planning milestone now carries the November 2024 publication month, normalized to month end. The profile's later milestones remain planner model choices.
 
 The implementation reflects real migration patterns used by large enterprises and public-sector organizations: inventory first, hybrid rollout, monitored phased rotation, rollback-safe operations, and eventual classical retirement under compliance timelines.
 

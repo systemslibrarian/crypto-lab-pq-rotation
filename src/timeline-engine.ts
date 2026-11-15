@@ -285,7 +285,11 @@ export const GERMANY_BSI: RegulatoryFramework = {
   name: 'Germany_BSI',
   milestones: [
     {
-      date: utcDate(2024, 10, 15),
+      // Joint European statement "Securing Tomorrow, Today: Transitioning to Post-Quantum
+      // Cryptography", published by BSI with 17 other states in November 2024 (month-end
+      // normalized; the edition BSI hosts is dated 27 June 2025). Reviewed 15 November 2026:
+      // https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Informationen-und-Empfehlungen/Quantentechnologien-und-Post-Quanten-Kryptografie/quantentechnologien-und-post-quanten-kryptografie_node.html
+      date: utcDate(2024, 11, 30),
       description: 'BSI urges immediate inventory, crypto-agility planning, and transition preparation.',
       category: 'planning',
     },
