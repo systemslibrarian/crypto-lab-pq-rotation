@@ -33,6 +33,13 @@ export interface RotationConfig {
   };
 }
 
+export function rolloutFailureSteps(percentages: number[]): Array<{ value: string; label: string }> {
+  return percentages.flatMap((percent) => [
+    { value: `rotate_${percent}`, label: `At ${percent}% rollout` },
+    { value: `monitor_${percent}`, label: `After ${percent}% monitoring` },
+  ]);
+}
+
 function validateRotationConfig(servers: ServerState[], config: RotationConfig): void {
   if (servers.length === 0) {
     throw new Error('Rotation requires at least one server.');
@@ -56,6 +63,13 @@ function validateRotationConfig(servers: ServerState[], config: RotationConfig):
   }
   if (previous !== 100) {
     throw new Error('Rollout stages must end at 100 before classical-only certificates can be retired.');
+  }
+  if (config.failureInjection.injectFailure) {
+    const fixedSteps = ['deploy_to_canary', 'monitor_canary', 'retire_old_cert'];
+    const step = config.failureInjection.atStep;
+    if (!step || !(fixedSteps.includes(step) || rolloutFailureSteps(config.rolloutPercentages).some((option) => option.value === step))) {
+      throw new Error('Choose a failure point in the current rollout plan.');
+    }
   }
 }
 

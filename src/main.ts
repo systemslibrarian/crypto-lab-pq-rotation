@@ -29,6 +29,7 @@ import {
 } from './timeline-engine.ts';
 import {
   fleetReadinessScore,
+  rolloutFailureSteps,
   runRotationSimulationChecks,
   simulateRotation,
   type RotationStep,
@@ -1072,15 +1073,19 @@ function renderFleetGrid(): string {
   `;
 }
 
-// The failure-injection points the simulator understands. Rendered from this
-// list so the selected option survives a re-render (see state.rotationFailureStep).
-const FAILURE_STEPS: Array<{ value: string; label: string }> = [
-  { value: 'none', label: 'No failure' },
-  { value: 'rotate_10', label: 'At 10% rollout' },
-  { value: 'monitor_10', label: 'After 10% monitoring' },
-  { value: 'rotate_50', label: 'At 50% rollout' },
-  { value: 'rotate_100', label: 'At 100% rollout' },
-];
+function renderFailureOptions(): string {
+  const options = [
+    { value: 'none', label: 'No failure' },
+    ...rolloutFailureSteps(parseRolloutStages(state.rotationStages) ?? []),
+  ];
+  const selection = state.rotationFailureStep;
+  if (!options.some((option) => option.value === selection)) {
+    options.push({ value: selection, label: 'Previously selected failure point (outside current plan)' });
+  }
+  return options.map(({ value, label }) =>
+    `<option value="${escapeHTML(value)}" ${value === selection ? 'selected' : ''}>${label}</option>`,
+  ).join('');
+}
 
 function renderRotationExhibit(): string {
   const readiness = fleetReadinessScore(state.rotationSummary?.finalState ?? state.rotationServers);
@@ -1099,10 +1104,7 @@ function renderRotationExhibit(): string {
         <label>Rollout stages (%) <input id="rolloutStages" type="text" value="${escapeHTML(state.rotationStages)}"></label>
         <label>Failure injection
           <select id="failureStep">
-            ${FAILURE_STEPS.map(
-              (option) =>
-                `<option value="${option.value}" ${option.value === state.rotationFailureStep ? 'selected' : ''}>${option.label}</option>`,
-            ).join('')}
+            ${renderFailureOptions()}
           </select>
         </label>
         <button type="button" data-action="run-rotation" class="run">Run Rotation</button>
@@ -1430,7 +1432,11 @@ function bindEvents(): void {
   };
   bindControl('#canaryPercent', 'input', (value) => (state.rotationCanaryPercent = value));
   bindControl('#monitorHours', 'input', (value) => (state.rotationMonitorHours = value));
-  bindControl('#rolloutStages', 'input', (value) => (state.rotationStages = value));
+  bindControl('#rolloutStages', 'input', (value) => {
+    state.rotationStages = value;
+    const failureSelect = document.querySelector<HTMLSelectElement>('#failureStep');
+    if (failureSelect) failureSelect.innerHTML = renderFailureOptions();
+  });
   bindControl('#failureStep', 'change', (value) => (state.rotationFailureStep = value));
 
   const verifyButton = document.querySelector<HTMLButtonElement>('button[data-action="run-verify"]');
@@ -1501,6 +1507,13 @@ function bindEvents(): void {
         state.uiMessageTone = 'error';
         runButton.disabled = false;
         runButton.textContent = 'Run Rotation';
+        renderDashboard();
+        return;
+      }
+
+      if (failureStep !== 'none' && !rolloutFailureSteps(stageValues).some((option) => option.value === failureStep)) {
+        state.uiMessage = 'Choose a failure point in the current rollout plan.';
+        state.uiMessageTone = 'error';
         renderDashboard();
         return;
       }

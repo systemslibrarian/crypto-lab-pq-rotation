@@ -787,8 +787,8 @@ test('the rotation form survives re-renders and the run honours what it says', a
 
   await page.locator('#canaryPercent').fill('15');
   await page.locator('#monitorHours').fill('2');
-  await page.locator('#rolloutStages').fill('25,75,100');
   await page.locator('#failureStep').selectOption('rotate_50');
+  await page.locator('#rolloutStages').fill('25,75,100');
 
   // Regression: every one of these re-renders the whole dashboard from state, and
   // each used to silently reset all four controls back to 10 / 24 / 10,50,100 /
@@ -804,6 +804,14 @@ test('the rotation form survives re-renders and the run honours what it says', a
   await page.locator('button[data-action="demo"][data-demo="finance"]').click();
   await expect(page.locator('button[data-demo="finance"]')).toHaveAttribute('aria-pressed', 'true');
   expect(await rotationForm(page)).toEqual(['15', '2', '25,75,100', 'rotate_50']);
+
+  await page.locator('button[data-action="run-rotation"]').click();
+  await expect(page.locator('#rotation [role="alert"]')).toHaveText('Choose a failure point in the current rollout plan.');
+  await expect(page.locator('#rotation .log-list')).toHaveText('No simulation run yet.');
+
+  await page.locator('#failureStep').selectOption('monitor_75');
+  await runRotation(page);
+  await expect(page.locator('.fleet-card .small-note')).toContainText('the 75% rollout stage failed its gate');
 
   // A stage list that is not the default is actually what gets simulated…
   await page.locator('#failureStep').selectOption('none');

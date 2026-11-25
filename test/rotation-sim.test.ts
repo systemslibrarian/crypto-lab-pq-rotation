@@ -28,6 +28,13 @@ const happyConfig = {
   failureInjection: { injectFailure: false },
 };
 
+it('rejects an unreachable failure before emitting any rotation step', async () => {
+  const steps: RotationStep[] = [];
+  const config = { ...happyConfig, rolloutPercentages: [25, 75, 100], failureInjection: { injectFailure: true, atStep: 'rotate_50' } };
+  await expect(simulateRotation(sampleFleet(), config, (step) => steps.push(step))).rejects.toThrow('Choose a failure point in the current rollout plan.');
+  expect(steps).toHaveLength(0);
+});
+
 describe('successful rotation', () => {
   it('completes all phases and leaves every server hybrid dual-signed', async () => {
     const run = await simulateRotation(sampleFleet(), happyConfig);
